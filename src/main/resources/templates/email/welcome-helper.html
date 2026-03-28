@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8"/>
+    <title>Welcome to HomeCare</title>
+    <style>
+        body { font-family: 'Segoe UI', Arial, sans-serif; background: #f5f5f5; margin: 0; padding: 20px; }
+        .container { max-width: 600px; margin: 0 auto; background: #fff; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        .header { background: #7C3AED; color: #fff; padding: 32px; text-align: center; }
+        .header h1 { margin: 0; font-size: 26px; }
+        .header p { margin: 8px 0 0; opacity: 0.9; }
+        .content { padding: 32px; color: #333; line-height: 1.6; }
+        .features { margin: 16px 0; }
+        .feature { padding: 8px 0; padding-left: 24px; position: relative; }
+        .feature::before { content: "✓"; position: absolute; left: 0; color: #7C3AED; font-weight: bold; }
+        .footer { padding: 20px 32px; text-align: center; color: #9CA3AF; font-size: 12px; border-top: 1px solid #E5E7EB; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <h1>Welcome to HomeCare! 🏠</h1>
+        <p>Start earning by helping families</p>
+    </div>
+    <div class="content">
+        <p>Hi <span th:text="${userName}">Helper</span>,</p>
+        <p>Welcome to the HomeCare helper network! We're glad to have you on board.</p>
+        <div class="features">
+            <div class="feature">Flexible working hours — work when you want</div>
+            <div class="feature">Competitive earnings with weekly payouts</div>
+            <div class="feature">Get booking assignments based on your skills</div>
+            <div class="feature">Build your reputation with customer ratings</div>
+        </div>
+        <p>Complete your profile and set your status to <strong>AVAILABLE</strong> to start receiving bookings.</p>
+    </div>
+    <div class="footer">
+        <p>HomeCare — Quality home services at your doorstep</p>
+    </div>
+</div>
+</body>
+</html>
+

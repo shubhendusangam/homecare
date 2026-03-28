@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8" />
+    <title>Daily Report</title>
+    <style>
+        body { font-family: 'Segoe UI', Arial, sans-serif; background: #f4f4f4; margin: 0; padding: 20px; }
+        .container { max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 8px; overflow: hidden; }
+        .header { background: #2563eb; color: #ffffff; padding: 24px; text-align: center; }
+        .header h1 { margin: 0; font-size: 22px; }
+        .body { padding: 24px; }
+        .greeting { font-size: 16px; color: #333; margin-bottom: 16px; }
+        table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+        th, td { padding: 10px 14px; text-align: left; border-bottom: 1px solid #e5e7eb; }
+        th { background: #f9fafb; color: #6b7280; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
+        td { font-size: 14px; color: #111827; }
+        td.value { font-weight: 600; text-align: right; }
+        .footer { padding: 16px 24px; background: #f9fafb; text-align: center; font-size: 12px; color: #9ca3af; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <h1>📊 HomeCare Daily Report</h1>
+        <p th:text="'Report Date: ' + ${reportDate}" style="margin: 8px 0 0; font-size: 14px; opacity: 0.9;"></p>
+    </div>
+    <div class="body">
+        <p class="greeting" th:text="'Hi ' + ${userName} + ','">Hi Admin,</p>
+        <p style="color: #4b5563; font-size: 14px; margin-bottom: 20px;">
+            Here is the daily summary for your platform:
+        </p>
+        <table>
+            <tr><th colspan="2">Booking Statistics</th></tr>
+            <tr><td>Total Bookings</td><td class="value" th:text="${totalBookings}">0</td></tr>
+            <tr><td>Completed</td><td class="value" th:text="${completedBookings}">0</td></tr>
+            <tr><td>Cancelled</td><td class="value" th:text="${cancelledBookings}">0</td></tr>
+            <tr><th colspan="2">Registrations</th></tr>
+            <tr><td>New Customers</td><td class="value" th:text="${newCustomers}">0</td></tr>
+            <tr><td>New Helpers</td><td class="value" th:text="${newHelpers}">0</td></tr>
+            <tr><th colspan="2">Financials</th></tr>
+            <tr><td>Total Revenue</td><td class="value" th:text="'₹' + ${totalRevenue}">₹0</td></tr>
+            <tr><td>Platform Fee</td><td class="value" th:text="'₹' + ${platformFee}">₹0</td></tr>
+            <tr><th colspan="2">Quality</th></tr>
+            <tr><td>Avg Helper Rating</td><td class="value" th:text="${avgHelperRating} + ' / 5.0'">0.0 / 5.0</td></tr>
+        </table>
+    </div>
+    <div class="footer">
+        &copy; HomeCare Platform &mdash; This is an automated report.
+    </div>
+</div>
+</body>
+</html>
+

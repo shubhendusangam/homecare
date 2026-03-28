@@ -1,0 +1,78 @@
+spring:
+  profiles:
+    active: test
+  datasource:
+    url: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: false
+    open-in-view: false
+  sql:
+    init:
+      mode: never
+  mail:
+    host: localhost
+    port: 3025
+    properties:
+      mail:
+        smtp:
+          auth: false
+          starttls:
+            enable: false
+  quartz:
+    job-store-type: memory
+    properties:
+      org.quartz.scheduler.instanceName: HomeCareTestScheduler
+      org.quartz.threadPool.threadCount: 2
+
+homecare:
+  jwt:
+    secret: test-secret-key-min-32-characters-for-jwt
+    expiry-minutes: 60
+    refresh-expiry-days: 1
+  services:
+    - id: CLEANING
+      name: Cleaning
+      base-price: 299
+      per-hour-price: 149
+      icon: cleaning
+    - id: COOKING
+      name: Cooking
+      base-price: 399
+      per-hour-price: 199
+      icon: cooking
+    - id: BABYSITTING
+      name: Babysitting
+      base-price: 499
+      per-hour-price: 249
+      icon: babysitting
+    - id: ELDERLY_HELP
+      name: Elderly Help
+      base-price: 449
+      per-hour-price: 199
+      icon: elderly
+  booking:
+    auto-assign-radius-km: 10
+    auto-expire-minutes: 15
+    max-advance-schedule-days: 30
+  payment:
+    wallet-low-balance-alert: 100
+    platform-fee: 0.15
+    razorpay-key-id: rzp_test_mock_key
+    default-currency: INR
+  notification:
+    email:
+      from: test@homecare.in
+      enabled: false
+    sms:
+      enabled: false
+
+logging:
+  level:
+    root: WARN
+    com.homecare: INFO
+

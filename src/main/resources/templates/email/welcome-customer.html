@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8"/>
+    <title>Welcome to HomeCare</title>
+    <style>
+        body { font-family: 'Segoe UI', Arial, sans-serif; background: #f5f5f5; margin: 0; padding: 20px; }
+        .container { max-width: 600px; margin: 0 auto; background: #fff; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        .header { background: #4F46E5; color: #fff; padding: 32px; text-align: center; }
+        .header h1 { margin: 0; font-size: 26px; }
+        .header p { margin: 8px 0 0; opacity: 0.9; }
+        .content { padding: 32px; color: #333; line-height: 1.6; }
+        .features { margin: 16px 0; }
+        .feature { padding: 8px 0; padding-left: 24px; position: relative; }
+        .feature::before { content: "✓"; position: absolute; left: 0; color: #4F46E5; font-weight: bold; }
+        .cta { display: inline-block; background: #4F46E5; color: #fff; padding: 12px 24px; border-radius: 8px; text-decoration: none; margin-top: 16px; font-weight: 600; }
+        .footer { padding: 20px 32px; text-align: center; color: #9CA3AF; font-size: 12px; border-top: 1px solid #E5E7EB; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <h1>Welcome to HomeCare! 🏠</h1>
+        <p>Quality home services at your doorstep</p>
+    </div>
+    <div class="content">
+        <p>Hi <span th:text="${userName}">User</span>,</p>
+        <p>Thank you for joining HomeCare! We're excited to help you with your home service needs.</p>
+        <div class="features">
+            <div class="feature">Book cleaning, cooking, babysitting &amp; elderly care</div>
+            <div class="feature">Background-verified &amp; trained helpers</div>
+            <div class="feature">Real-time tracking of your helper</div>
+            <div class="feature">Secure wallet payments</div>
+        </div>
+        <p>Get started by topping up your wallet and booking your first service!</p>
+    </div>
+    <div class="footer">
+        <p>HomeCare — Quality home services at your doorstep</p>
+    </div>
+</div>
+</body>
+</html>
+

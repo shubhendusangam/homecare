@@ -1,0 +1,90 @@
+spring:
+  profiles:
+    active: dev
+  application:
+    name: homecare
+  jpa:
+    open-in-view: false
+  servlet:
+    multipart:
+      max-file-size: 5MB
+  web:
+    resources:
+      static-locations: classpath:/static/
+  mail:
+    host: ${MAIL_HOST:smtp.gmail.com}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+  thymeleaf:
+    prefix: classpath:/templates/
+    suffix: .html
+    mode: HTML
+    cache: false
+  quartz:
+    job-store-type: memory
+    properties:
+      org.quartz.scheduler.instanceName: HomeCareScheduler
+      org.quartz.threadPool.threadCount: 5
+
+server:
+  port: 8080
+
+homecare:
+  jwt:
+    secret: ${JWT_SECRET:homecare-dev-secret-min-32-chars-change-in-prod}
+    expiry-minutes: 1440
+    refresh-expiry-days: 30
+  services:
+    - id: CLEANING
+      name: Cleaning
+      base-price: 299
+      per-hour-price: 149
+      icon: cleaning
+    - id: COOKING
+      name: Cooking
+      base-price: 399
+      per-hour-price: 199
+      icon: cooking
+    - id: BABYSITTING
+      name: Babysitting
+      base-price: 499
+      per-hour-price: 249
+      icon: babysitting
+    - id: ELDERLY_HELP
+      name: Elderly Help
+      base-price: 449
+      per-hour-price: 199
+      icon: elderly
+  booking:
+    auto-assign-radius-km: 10
+    auto-expire-minutes: 15
+    max-advance-schedule-days: 30
+  payment:
+    wallet-low-balance-alert: 100
+    platform-fee: 0.15
+    razorpay-key-id: ${RAZORPAY_KEY_ID:rzp_test_mock_key}
+    default-currency: INR
+  tracking:
+    location-update-interval-seconds: 10
+  notification:
+    email:
+      from: ${MAIL_FROM:noreply@homecare.in}
+      enabled: ${MAIL_ENABLED:false}
+    sms:
+      enabled: ${SMS_ENABLED:false}
+
+logging:
+  config: classpath:logback-spring.xml
+  level:
+    root: INFO
+    com.homecare: INFO
+    com.homecare.core.logging: INFO
+    AUDIT: INFO
+

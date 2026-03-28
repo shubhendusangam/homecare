@@ -1,0 +1,30 @@
+spring:
+  datasource:
+    url: ${DATABASE_URL}
+    username: ${DATABASE_USER}
+    password: ${DATABASE_PASSWORD}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+  h2:
+    console:
+      enabled: false
+  quartz:
+    job-store-type: jdbc
+    jdbc:
+      initialize-schema: never
+    properties:
+      org.quartz.jobStore.driverDelegateClass: org.quartz.impl.jdbcjobstore.PostgreSQLDelegate
+    overwrite-existing-jobs: true
+
+logging:
+  level:
+    root: WARN
+    com.homecare: INFO
+    com.homecare.core.logging: INFO
+    com.homecare.core.filter: INFO
+    AUDIT: INFO
+    org.springframework: WARN
+    org.hibernate: WARN
+

@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HomeCare</title>
+  <link rel="stylesheet" href="/css/app.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+        crossorigin="" />
+</head>
+<body>
+  <div id="app">
+    <!-- Toast container -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <!-- Tab switcher — visible only when logged in -->
+    <nav id="tab-nav" class="tab-nav hidden">
+      <button class="tab-btn active" data-tab="customer">
+        <span class="tab-icon">🏠</span><span class="tab-label">Customer</span>
+      </button>
+      <button class="tab-btn" data-tab="helper">
+        <span class="tab-icon">🔧</span><span class="tab-label">Helper</span>
+      </button>
+      <button class="tab-btn" data-tab="admin">
+        <span class="tab-icon">⚙️</span><span class="tab-label">Admin</span>
+      </button>
+    </nav>
+
+    <!-- Top bar — visible when logged in -->
+    <header id="top-bar" class="top-bar hidden">
+      <a href="#/" class="logo">🏠 HomeCare</a>
+      <div class="top-bar-right">
+        <span id="user-greeting" class="user-greeting"></span>
+        <button id="btn-logout" class="btn-sm btn-outline">Logout</button>
+      </div>
+    </header>
+
+    <!-- Login screen — always first -->
+    <div id="screen-login" class="screen"></div>
+
+    <!-- Customer tab screens -->
+    <div id="tab-customer" class="tab hidden">
+      <div id="screen-customer-home" class="screen"></div>
+      <div id="screen-customer-book" class="screen"></div>
+      <div id="screen-customer-tracking" class="screen"></div>
+      <div id="screen-customer-history" class="screen"></div>
+      <div id="screen-customer-wallet" class="screen"></div>
+      <div id="screen-customer-profile" class="screen"></div>
+    </div>
+
+    <!-- Helper tab screens -->
+    <div id="tab-helper" class="tab hidden">
+      <div id="screen-helper-home" class="screen"></div>
+      <div id="screen-helper-bookings" class="screen"></div>
+      <div id="screen-helper-active" class="screen"></div>
+      <div id="screen-helper-earnings" class="screen"></div>
+      <div id="screen-helper-profile" class="screen"></div>
+    </div>
+
+    <!-- Admin tab screens -->
+    <div id="tab-admin" class="tab hidden">
+      <div id="screen-admin-dashboard" class="screen"></div>
+      <div id="screen-admin-bookings" class="screen"></div>
+      <div id="screen-admin-users" class="screen"></div>
+      <div id="screen-admin-helpers" class="screen"></div>
+      <div id="screen-admin-payments" class="screen"></div>
+      <div id="screen-admin-config" class="screen"></div>
+    </div>
+  </div>
+
+  <!-- Leaflet JS -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+          integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+          crossorigin=""></script>
+  <!-- SockJS + STOMP for WebSocket -->
+  <script src="https://cdn.jsdelivr.net/npm/sockjs-client@1.6.1/dist/sockjs.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@stomp/stompjs@7.0.0/bundles/stomp.umd.min.js"></script>
+
+  <script type="module" src="/js/app.js"></script>
+</body>
+</html>
+
