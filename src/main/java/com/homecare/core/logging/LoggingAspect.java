@@ -12,22 +12,31 @@ import org.springframework.stereotype.Component;
 
 import java.lang.reflect.Method;
 import java.util.StringJoiner;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.LongAdder;
 
 
 /**
  * Centralized AOP logging aspect that automatically logs:
  * <ul>
- *   <li>Entry + arguments for every controller and service method</li>
+ *   <li>Entry + arguments (with sensitive data masking) for every controller,
+ *       service, and repository method</li>
  *   <li>Exit + return value + execution time</li>
  *   <li>Exceptions with full context</li>
+ *   <li>Slow method detection (>1s WARN, >5s ERROR)</li>
  * </ul>
  * Methods/classes annotated with {@link Logged} get customised verbosity.
- * Without the annotation, controllers log at DEBUG and services log at DEBUG.
  */
 @Aspect
 @Component
 @Slf4j
 public class LoggingAspect {
+
+    /** Tracks invocation counts per method for periodic metrics logging. */
+    private final ConcurrentHashMap<String, LongAdder> invocationCounts = new ConcurrentHashMap<>();
+
+    private static final int SLOW_THRESHOLD_MS = 1_000;
+    private static final int VERY_SLOW_THRESHOLD_MS = 5_000;
 
     // ─── Pointcuts ────────────────────────────────────────────────────
 
@@ -36,6 +45,9 @@ public class LoggingAspect {
 
     @Pointcut("within(com.homecare..service..*)")
     private void serviceLayer() {}
+
+    @Pointcut("within(com.homecare..repository..*)")
+    private void repositoryLayer() {}
 
     @Pointcut("@within(com.homecare.core.logging.Logged) || @annotation(com.homecare.core.logging.Logged)")
     private void loggedAnnotation() {}
@@ -55,6 +67,13 @@ public class LoggingAspect {
     @Around("serviceLayer() && publicHomecareMethod()")
     public Object logService(ProceedingJoinPoint joinPoint) throws Throwable {
         return logExecution(joinPoint, "SVC", "DEBUG");
+    }
+
+    // ─── Advice: Repository methods (TRACE — enabled only in dev) ────
+
+    @Around("repositoryLayer() && publicHomecareMethod()")
+    public Object logRepository(ProceedingJoinPoint joinPoint) throws Throwable {
+        return logExecution(joinPoint, "REPO", "TRACE");
     }
 
     // ─── Advice: Explicitly @Logged methods ───────────────────────────
@@ -78,14 +97,18 @@ public class LoggingAspect {
                                  boolean logArgs, boolean logResult) throws Throwable {
         Logger targetLog = LoggerFactory.getLogger(joinPoint.getTarget().getClass());
         MethodSignature sig = (MethodSignature) joinPoint.getSignature();
-        String methodName = sig.getDeclaringType().getSimpleName() + "." + sig.getName();
+        String className = sig.getDeclaringType().getSimpleName();
+        String methodName = className + "." + sig.getName();
+
+        // Track invocation count
+        invocationCounts.computeIfAbsent(methodName, k -> new LongAdder()).increment();
 
         // Don't log if target logger wouldn't emit at this level
         if (!isLevelEnabled(targetLog, defaultLevel)) {
             return joinPoint.proceed();
         }
 
-        // Entry log
+        // Entry log — with sensitive data masking
         String argsStr = logArgs ? formatArgs(sig.getParameterNames(), joinPoint.getArgs()) : "[hidden]";
         doLog(targetLog, defaultLevel, "▶ [{}] {} ({})", layer, methodName, argsStr);
 
@@ -94,10 +117,11 @@ public class LoggingAspect {
             Object result = joinPoint.proceed();
             long elapsed = (System.nanoTime() - start) / 1_000_000;
 
-            // Exit log
+            // Exit log — with tiered slow detection
             String resultStr = logResult ? summarise(result) : "[hidden]";
-            if (elapsed > 1000) {
-                // Slow execution — always log at WARN
+            if (elapsed > VERY_SLOW_THRESHOLD_MS) {
+                targetLog.error("◀ [{}] {} → {} [{}ms] 🔴 VERY SLOW", layer, methodName, resultStr, elapsed);
+            } else if (elapsed > SLOW_THRESHOLD_MS) {
                 targetLog.warn("◀ [{}] {} → {} [{}ms] ⚠ SLOW", layer, methodName, resultStr, elapsed);
             } else {
                 doLog(targetLog, defaultLevel, "◀ [{}] {} → {} [{}ms]", layer, methodName, resultStr, elapsed);
@@ -126,7 +150,12 @@ public class LoggingAspect {
         StringJoiner sj = new StringJoiner(", ");
         for (int i = 0; i < values.length; i++) {
             String name = (names != null && i < names.length) ? names[i] : "arg" + i;
-            sj.add(name + "=" + summarise(values[i]));
+            // Mask sensitive parameters (password, token, etc.)
+            if (SensitiveDataMasker.isSensitiveField(name)) {
+                sj.add(name + "=***");
+            } else {
+                sj.add(name + "=" + summarise(values[i]));
+            }
         }
         return sj.toString();
     }
@@ -136,9 +165,10 @@ public class LoggingAspect {
         String str = obj.toString();
         // Truncate large payloads
         if (str.length() > 200) {
-            return str.substring(0, 200) + "…(" + str.length() + " chars)";
+            str = str.substring(0, 200) + "…(" + str.length() + " chars)";
         }
-        return str;
+        // Mask any inline sensitive data (tokens, card numbers)
+        return SensitiveDataMasker.maskInline(str);
     }
 
     private boolean isLevelEnabled(Logger logger, String level) {

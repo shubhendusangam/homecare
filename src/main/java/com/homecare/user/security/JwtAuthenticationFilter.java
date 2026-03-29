@@ -39,7 +39,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
                 // Reject banned users immediately
                 if (bannedUserStore.isBanned(userId)) {
-                    log.debug("Rejecting request from banned user {}", userId);
+                    log.warn("SECURITY | event=BANNED_USER_REJECTED | userId={} | uri={} | ip={}",
+                            userId, request.getRequestURI(), request.getRemoteAddr());
                     response.setStatus(HttpServletResponse.SC_FORBIDDEN);
                     response.setContentType("application/json");
                     response.getWriter().write("{\"success\":false,\"message\":\"Account has been suspended\",\"errorCode\":\"FORBIDDEN\"}");
@@ -62,7 +63,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 MDC.put("userId", userId.toString());
                 MDC.put("role", roleStr);
             } catch (Exception e) {
-                log.error("Could not set user authentication from JWT", e);
+                log.warn("SECURITY | event=JWT_PARSE_FAILURE | uri={} | ip={} | error={}",
+                        request.getRequestURI(), request.getRemoteAddr(), e.getMessage());
             }
         }
 

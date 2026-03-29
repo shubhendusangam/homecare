@@ -1,16 +1,27 @@
 package com.homecare.scheduler;
 
+import com.homecare.core.logging.QuartzJobLoggingListener;
 import org.quartz.*;
+import org.springframework.boot.autoconfigure.quartz.SchedulerFactoryBeanCustomizer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 /**
- * Quartz scheduler configuration — registers recurring cron-triggered jobs.
+ * Quartz scheduler configuration — registers recurring cron-triggered jobs
+ * and global job listeners (logging, MDC).
  * One-shot jobs (BookingAutoExpireJob, ScheduledBookingTriggerJob, BookingReminderJob)
  * are scheduled programmatically by BookingService.
  */
 @Configuration
 public class QuartzConfig {
+
+    // ─── Global Job Listener — MDC context + timing for every job ────
+
+    @Bean
+    public SchedulerFactoryBeanCustomizer schedulerFactoryBeanCustomizer() {
+        return schedulerFactoryBean ->
+                schedulerFactoryBean.setGlobalJobListeners(new QuartzJobLoggingListener());
+    }
 
     // ─── DailyReportJob — fires every day at 11:55 PM ──────────────────
 

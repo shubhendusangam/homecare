@@ -20,14 +20,16 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(ResourceNotFoundException.class)
     public ResponseEntity<ApiResponse<Void>> handleResourceNotFound(ResourceNotFoundException ex) {
-        log.warn("Resource not found: {}", ex.getMessage());
+        log.warn("exception.type=ResourceNotFound exception.code={} exception.message=\"{}\" requestId={}",
+                ex.getErrorCode(), ex.getMessage(), mdcGet("requestId"));
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
                 .body(ApiResponse.error(ex.getMessage(), ex.getErrorCode().name()));
     }
 
     @ExceptionHandler(BusinessException.class)
     public ResponseEntity<ApiResponse<Void>> handleBusiness(BusinessException ex) {
-        log.warn("Business error: {} [{}]", ex.getMessage(), ex.getErrorCode());
+        log.warn("exception.type=Business exception.code={} exception.message=\"{}\" requestId={} userId={}",
+                ex.getErrorCode(), ex.getMessage(), mdcGet("requestId"), mdcGet("userId"));
         HttpStatus status = mapErrorCodeToStatus(ex.getErrorCode());
         return ResponseEntity.status(status)
                 .body(ApiResponse.error(ex.getMessage(), ex.getErrorCode().name()));
@@ -49,7 +51,8 @@ public class GlobalExceptionHandler {
         Map<String, String> fieldErrors = new HashMap<>();
         ex.getBindingResult().getFieldErrors()
                 .forEach(err -> fieldErrors.put(err.getField(), err.getDefaultMessage()));
-        log.warn("Validation failed: {}", fieldErrors);
+        log.warn("exception.type=ValidationFailed fields={} requestId={} userId={}",
+                fieldErrors.keySet(), mdcGet("requestId"), mdcGet("userId"));
 
         ApiResponse<Map<String, String>> response = ApiResponse.<Map<String, String>>builder()
                 .success(false)
@@ -65,7 +68,8 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(AccessDeniedException.class)
     public ResponseEntity<ApiResponse<Void>> handleAccessDenied(AccessDeniedException ex) {
-        log.warn("Access denied: {}", ex.getMessage());
+        log.warn("exception.type=AccessDenied exception.message=\"{}\" requestId={} userId={} uri={}",
+                ex.getMessage(), mdcGet("requestId"), mdcGet("userId"), mdcGet("uri"));
         return ResponseEntity.status(HttpStatus.FORBIDDEN)
                 .body(ApiResponse.error("Access denied", ErrorCode.FORBIDDEN.name()));
     }
@@ -82,18 +86,33 @@ public class GlobalExceptionHandler {
                 message = "An account with this phone number already exists";
             }
         }
-        log.warn("Data integrity violation: {}", rootMsg);
+        log.warn("exception.type=DataIntegrity constraint=\"{}\" requestId={} userId={}",
+                rootMsg != null ? rootMsg.substring(0, Math.min(rootMsg.length(), 200)) : "unknown",
+                mdcGet("requestId"), mdcGet("userId"));
         return ResponseEntity.status(HttpStatus.CONFLICT)
                 .body(ApiResponse.error(message, ErrorCode.DUPLICATE_EMAIL.name()));
     }
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<Void>> handleAll(Exception ex) {
-        String requestId = org.slf4j.MDC.get("requestId");
-        String userId = org.slf4j.MDC.get("userId");
-        log.error("Unhandled exception [requestId={}, userId={}]", requestId, userId, ex);
+        String requestId = mdcGet("requestId");
+        String userId = mdcGet("userId");
+        String uri = mdcGet("uri");
+        String method = mdcGet("method");
+
+        // Full stack trace for unexpected errors — critical for debugging
+        log.error("exception.type=Unhandled exception.class={} exception.message=\"{}\" " +
+                  "requestId={} userId={} method={} uri={}",
+                ex.getClass().getName(), ex.getMessage(),
+                requestId, userId, method, uri, ex);
+
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(ApiResponse.error("An unexpected error occurred", ErrorCode.INTERNAL_ERROR.name()));
+    }
+
+    private String mdcGet(String key) {
+        String val = org.slf4j.MDC.get(key);
+        return val != null ? val : "-";
     }
 }
 
