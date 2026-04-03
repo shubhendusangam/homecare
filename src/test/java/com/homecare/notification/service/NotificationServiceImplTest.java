@@ -4,11 +4,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.homecare.core.exception.ResourceNotFoundException;
 import com.homecare.notification.config.NotificationTemplates;
 import com.homecare.notification.dto.NotificationResponse;
-import com.homecare.notification.email.EmailService;
 import com.homecare.notification.entity.Notification;
 import com.homecare.notification.enums.NotificationType;
 import com.homecare.notification.repository.NotificationRepository;
-import com.homecare.notification.sms.SmsService;
 import com.homecare.notification.websocket.WebSocketNotificationPusher;
 import com.homecare.user.entity.User;
 import com.homecare.user.enums.Role;
@@ -23,7 +21,6 @@ import org.mockito.Mock;
 import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.PageImpl;
-import org.springframework.data.domain.PageRequest;
 
 import java.util.*;
 
@@ -39,8 +36,7 @@ class NotificationServiceImplTest {
     @Mock private UserRepository userRepository;
     @Spy private NotificationTemplates templates;
     @Mock private WebSocketNotificationPusher webSocketPusher;
-    @Mock private EmailService emailService;
-    @Mock private SmsService smsService;
+    @Mock private AsyncNotificationDispatcher asyncDispatcher;
     @Spy private ObjectMapper objectMapper;
 
     @InjectMocks private NotificationServiceImpl notificationService;
@@ -66,7 +62,7 @@ class NotificationServiceImplTest {
     class SendToUser {
 
         @Test
-        @DisplayName("happy path — persists, pushes WebSocket, sends email if applicable")
+        @DisplayName("happy path — persists, pushes WebSocket, dispatches email async")
         void happyPath() {
             when(userRepository.findById(customer.getId())).thenReturn(Optional.of(customer));
             when(notificationRepository.save(any(Notification.class))).thenAnswer(inv -> {
@@ -83,6 +79,9 @@ class NotificationServiceImplTest {
 
             verify(notificationRepository).save(any(Notification.class));
             verify(webSocketPusher).push(eq(customer.getId()), any(NotificationResponse.class));
+            // Email dispatched async via dispatcher (BOOKING_CONFIRMED has email template)
+            verify(asyncDispatcher).sendEmail(any(UUID.class), eq("john@test.com"),
+                    anyString(), eq("booking-confirmed"), any());
         }
 
         @Test
@@ -96,7 +95,7 @@ class NotificationServiceImplTest {
         }
 
         @Test
-        @DisplayName("SMS sent for high-priority types (BOOKING_ASSIGNED)")
+        @DisplayName("SMS dispatched async for high-priority types (BOOKING_ASSIGNED)")
         void smsSentForHighPriority() {
             when(userRepository.findById(customer.getId())).thenReturn(Optional.of(customer));
             when(notificationRepository.save(any())).thenAnswer(inv -> {
@@ -108,11 +107,11 @@ class NotificationServiceImplTest {
             notificationService.sendToUser(customer.getId(),
                     NotificationType.BOOKING_ASSIGNED, Map.of());
 
-            verify(smsService).send(eq("9876543210"), anyString());
+            verify(asyncDispatcher).sendSms(any(UUID.class), eq("9876543210"), anyString());
         }
 
         @Test
-        @DisplayName("SMS NOT sent for low-priority types (PAYMENT_SUCCESS)")
+        @DisplayName("SMS NOT dispatched for low-priority types (PAYMENT_SUCCESS)")
         void smsNotSentForLowPriority() {
             when(userRepository.findById(customer.getId())).thenReturn(Optional.of(customer));
             when(notificationRepository.save(any())).thenAnswer(inv -> {
@@ -124,7 +123,7 @@ class NotificationServiceImplTest {
             notificationService.sendToUser(customer.getId(),
                     NotificationType.PAYMENT_SUCCESS, Map.of());
 
-            verify(smsService, never()).send(anyString(), anyString());
+            verify(asyncDispatcher, never()).sendSms(any(), anyString(), anyString());
         }
 
         @Test

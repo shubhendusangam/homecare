@@ -6,6 +6,7 @@ import jakarta.validation.constraints.*;
 import lombok.Data;
 
 import java.time.Instant;
+import java.util.UUID;
 
 @Data
 public class CreateBookingRequest {
@@ -34,5 +35,11 @@ public class CreateBookingRequest {
 
     @Size(max = 1000, message = "Special instructions must be under 1000 characters")
     private String specialInstructions;
+
+    /** Optional — if present, this booking is covered by the given subscription. */
+    private UUID subscriptionId;
+
+    /** Optional — if present, request this specific helper (must be in customer's favourites). */
+    private UUID requestedHelperId;
 }
 

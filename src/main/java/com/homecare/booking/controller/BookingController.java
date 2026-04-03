@@ -1,6 +1,7 @@
 package com.homecare.booking.controller;
 
 import com.homecare.booking.dto.AvailableHelperResponse;
+import com.homecare.booking.dto.AvailableSlotResponse;
 import com.homecare.booking.dto.BookingResponse;
 import com.homecare.booking.dto.CreateBookingRequest;
 import com.homecare.booking.service.BookingService;
@@ -11,11 +12,14 @@ import com.homecare.user.security.UserPrincipal;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
@@ -65,10 +69,23 @@ public class BookingController {
             @RequestParam ServiceType serviceType,
             @RequestParam double latitude,
             @RequestParam double longitude,
-            @RequestParam(required = false) Double radiusKm) {
+            @RequestParam(required = false) Double radiusKm,
+            @RequestParam(required = false) Instant scheduledAt) {
         List<AvailableHelperResponse> helpers = bookingService
-                .findAvailableHelpers(serviceType, latitude, longitude, radiusKm);
+                .findAvailableHelpers(serviceType, latitude, longitude, radiusKm, scheduledAt);
         return ResponseEntity.ok(ApiResponse.ok(helpers));
+    }
+
+    @GetMapping("/available-slots")
+    public ResponseEntity<ApiResponse<List<AvailableSlotResponse>>> getAvailableSlots(
+            @RequestParam ServiceType serviceType,
+            @RequestParam double latitude,
+            @RequestParam double longitude,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+            @RequestParam(required = false) Double radiusKm) {
+        List<AvailableSlotResponse> slots = bookingService
+                .getAvailableSlots(serviceType, latitude, longitude, date, radiusKm);
+        return ResponseEntity.ok(ApiResponse.ok(slots));
     }
 }
 

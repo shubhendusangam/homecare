@@ -7,7 +7,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.thymeleaf.TemplateEngine;
 import org.thymeleaf.context.Context;
@@ -16,7 +15,8 @@ import java.util.Map;
 
 /**
  * Sends HTML emails using JavaMail + Thymeleaf templates.
- * All sends are async to avoid blocking the calling thread.
+ * Called by {@link com.homecare.notification.service.AsyncNotificationDispatcher}
+ * on the {@code notificationExecutor} thread pool — do not add {@code @Async} here.
  */
 @Service
 @RequiredArgsConstructor
@@ -34,13 +34,13 @@ public class EmailService {
 
     /**
      * Sends an HTML email rendered from a Thymeleaf template.
+     * This method runs on the calling thread — async dispatch is handled by the caller.
      *
      * @param to           recipient email
      * @param subject      email subject
      * @param templateName template file name (without .html) under templates/email/
      * @param variables    model variables for the template
      */
-    @Async
     public void sendHtmlEmail(String to, String subject, String templateName, Map<String, Object> variables) {
         if (!emailEnabled) {
             log.info("Email disabled — would send '{}' to {} using template '{}'", subject, to, templateName);

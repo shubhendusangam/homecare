@@ -156,6 +156,7 @@ export async function render(container, params) {
 
     <!-- Emergency Contact -->
     <div class="text-center mt-2">
+      <button class="btn btn-outline btn-sm" id="btn-chat">💬 Chat with Customer</button>
       <button class="btn btn-outline btn-sm" id="btn-emergency">🆘 Emergency Contact</button>
       <a href="#/helper/bookings" class="btn btn-outline btn-sm" style="margin-left:.5rem">← Back</a>
     </div>
@@ -204,6 +205,56 @@ export async function render(container, params) {
       toast('Admin support: +91-9876543210', 'info', 5000);
     });
   }
+
+  // Chat with customer
+  const chatBtn = document.getElementById('btn-chat');
+  if (chatBtn) {
+    chatBtn.addEventListener('click', () => openHelperChat(booking));
+  }
+}
+
+function openHelperChat(booking) {
+  const slot = document.getElementById('chat-drawer-slot');
+  if (slot.querySelector('.chat-drawer')) { slot.innerHTML = ''; return; }
+  const bookingId = booking.id;
+  slot.innerHTML = `
+    <div class="chat-drawer" role="dialog" aria-label="Chat with customer">
+      <div class="chat-header"><h4>💬 Chat with ${esc(booking.customerName || 'Customer')}</h4>
+        <button class="modal-close" id="chat-close" aria-label="Close chat">&times;</button>
+      </div>
+      <div class="chat-messages" id="chat-msgs"><div class="text-center text-muted"><span class="spinner"></span></div></div>
+      <div class="chat-input-row">
+        <input type="text" id="chat-input" placeholder="Type a message…" maxlength="500" autocomplete="off" />
+        <button id="chat-send" aria-label="Send message">Send</button>
+      </div>
+    </div>`;
+  document.getElementById('chat-close').addEventListener('click', () => { slot.innerHTML = ''; });
+  loadHelperChat(bookingId);
+  const input = document.getElementById('chat-input');
+  const sendBtn = document.getElementById('chat-send');
+  const sendMsg = async () => {
+    const text = input.value.trim();
+    if (!text) return;
+    input.value = '';
+    try { await api.post('/chat/' + bookingId + '/send', { content: text }); loadHelperChat(bookingId); } catch {}
+  };
+  sendBtn.addEventListener('click', sendMsg);
+  input.addEventListener('keydown', e => { if (e.key === 'Enter') sendMsg(); });
+}
+
+async function loadHelperChat(bookingId) {
+  const el = document.getElementById('chat-msgs');
+  if (!el) return;
+  try {
+    const msgs = await api.get('/chat/' + bookingId);
+    if (!msgs || !msgs.length) { el.innerHTML = '<p class="text-muted text-center" style="margin-top:2rem">No messages yet.</p>'; return; }
+    el.innerHTML = msgs.map(m => {
+      const mine = m.senderRole === 'HELPER';
+      const time = m.sentAt ? new Date(m.sentAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }) : '';
+      return `<div class="chat-bubble ${mine ? 'mine' : ''}">${esc(m.content)}<span class="cb-time">${time}</span></div>`;
+    }).join('');
+    el.scrollTop = el.scrollHeight;
+  } catch { el.innerHTML = '<p class="text-muted text-center">Could not load chat</p>'; }
 }
 
 function showCompleteModal(bookingId, container, params) {

@@ -240,12 +240,98 @@ function renderHelperCard(booking) {
         </div>
       </div>
       <div class="thc-actions">
-        <a class="icon-btn" href="tel:" title="Call helper">📞</a>
-        <button class="icon-btn" title="Help" id="btn-help-chat">💬</button>
+        <button class="fav-btn" id="btn-fav-helper" aria-label="Add to favourites" data-helper="${booking.helperId}">🤍</button>
+        <a class="icon-btn" href="tel:" title="Call helper" aria-label="Call helper">📞</a>
+        <button class="icon-btn" title="Chat" id="btn-help-chat" aria-label="Open chat">💬</button>
       </div>
     </div>
   `;
   document.getElementById('thc-name-val').textContent = booking.helperName || 'Your helper';
+
+  // Favourite toggle
+  const favBtn = document.getElementById('btn-fav-helper');
+  if (favBtn) {
+    // Check if already favourite
+    checkFavourite(booking.helperId, favBtn);
+    favBtn.addEventListener('click', async () => {
+      if (favBtn.classList.contains('active')) {
+        try { await api.delete('/favourites/' + booking.helperId); favBtn.classList.remove('active'); favBtn.textContent = '🤍'; toast('Removed from favourites', 'info'); } catch {}
+      } else {
+        try { await api.post('/favourites/' + booking.helperId); favBtn.classList.add('active'); favBtn.textContent = '❤️'; toast('Added to favourites!', 'success'); } catch {}
+      }
+    });
+  }
+
+  // Chat button
   const helpBtn = document.getElementById('btn-help-chat');
-  if (helpBtn) helpBtn.addEventListener('click', () => toast('Chat coming soon', 'info'));
+  if (helpBtn) helpBtn.addEventListener('click', () => openChatDrawer(booking));
+}
+
+async function checkFavourite(helperId, btn) {
+  try {
+    const favs = await api.get('/favourites');
+    if (favs && favs.some(f => f.helperId === helperId)) {
+      btn.classList.add('active');
+      btn.textContent = '❤️';
+    }
+  } catch {}
+}
+
+function openChatDrawer(booking) {
+  const slot = document.getElementById('chat-drawer-slot');
+  if (slot.querySelector('.chat-drawer')) { slot.innerHTML = ''; return; }
+  const bookingId = booking.id;
+  slot.innerHTML = `
+    <div class="chat-drawer" role="dialog" aria-label="Chat with helper">
+      <div class="chat-header">
+        <h4>💬 Chat with <span id="chat-helper-name"></span></h4>
+        <button class="modal-close" id="chat-close" aria-label="Close chat">&times;</button>
+      </div>
+      <div class="chat-messages" id="chat-msgs"><div class="text-center text-muted"><span class="spinner"></span></div></div>
+      <div class="chat-input-row">
+        <input type="text" id="chat-input" placeholder="Type a message…" maxlength="500" autocomplete="off" />
+        <button id="chat-send" aria-label="Send message">Send</button>
+      </div>
+    </div>`;
+  document.getElementById('chat-close').addEventListener('click', () => { slot.innerHTML = ''; });
+  document.getElementById('chat-helper-name').textContent = booking.helperName || 'Helper';
+
+  // Load chat history
+  loadChatHistory(bookingId);
+
+  // Send message
+  const input = document.getElementById('chat-input');
+  const sendBtn = document.getElementById('chat-send');
+  const sendMsg = async () => {
+    const text = input.value.trim();
+    if (!text) return;
+    input.value = '';
+    try {
+      await api.post('/chat/' + bookingId + '/send', { content: text });
+      loadChatHistory(bookingId);
+    } catch {}
+  };
+  sendBtn.addEventListener('click', sendMsg);
+  input.addEventListener('keydown', e => { if (e.key === 'Enter') sendMsg(); });
+
+  // Subscribe to STOMP for live messages
+  if (stompClient && stompClient.connected) {
+    stompClient.subscribe('/topic/chat/' + bookingId, () => loadChatHistory(bookingId));
+  }
+}
+
+async function loadChatHistory(bookingId) {
+  const el = document.getElementById('chat-msgs');
+  if (!el) return;
+  try {
+    const msgs = await api.get('/chat/' + bookingId);
+    const userId = auth.user()?.userId;
+    if (!msgs || !msgs.length) { el.innerHTML = '<p class="text-muted text-center" style="margin-top:2rem">No messages yet. Say hi!</p>'; return; }
+    el.innerHTML = msgs.map(m => {
+      const mine = m.senderId === userId;
+      const time = m.sentAt ? new Date(m.sentAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }) : '';
+      return `<div class="chat-bubble ${mine ? 'mine' : ''}">${esc(m.content)}<span class="cb-time">${time}</span></div>`;
+    }).join('');
+    el.scrollTop = el.scrollHeight;
+  } catch { el.innerHTML = '<p class="text-muted text-center">Could not load chat</p>'; }
 }

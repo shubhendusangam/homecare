@@ -3,6 +3,9 @@ package com.homecare.user.service;
 import com.homecare.core.enums.ErrorCode;
 import com.homecare.core.exception.BusinessException;
 import com.homecare.core.logging.AuditEvent;
+import com.homecare.referral.entity.ReferralCode;
+import com.homecare.referral.repository.ReferralCodeRepository;
+import com.homecare.referral.service.ReferralService;
 import com.homecare.user.dto.*;
 import com.homecare.user.entity.CustomerProfile;
 import com.homecare.user.entity.HelperProfile;
@@ -21,6 +24,7 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -40,6 +44,8 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
     private final ApplicationEventPublisher eventPublisher;
+    private final ReferralCodeRepository referralCodeRepository;
+    private final ReferralService referralService;
 
     @Transactional
     public LoginResponse registerCustomer(RegisterCustomerRequest request) {
@@ -64,6 +70,14 @@ public class AuthService {
         log.info("Customer registered: {}", user.getEmail());
         eventPublisher.publishEvent(AuditEvent.of("CUSTOMER_REGISTERED", user.getId(),
                 java.util.Map.of("email", user.getEmail())));
+
+        // Process referral code if provided
+        if (StringUtils.hasText(request.getReferralCode())) {
+            ReferralCode code = referralCodeRepository.findByCode(request.getReferralCode().trim().toUpperCase())
+                    .orElseThrow(() -> new BusinessException("Invalid referral code", ErrorCode.INVALID_REFERRAL_CODE));
+            referralService.createEvent(code.getUser(), user, code.getCode());
+        }
+
         return generateTokens(user);
     }
 

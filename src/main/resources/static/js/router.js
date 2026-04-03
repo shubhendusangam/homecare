@@ -8,8 +8,9 @@ import { auth } from './auth.js';
 
 // ─── Route definitions ──────────────────────────────────────────────
 const routes = [
-  // Login
+  // Login & Register
   { path: '/login',                   loader: () => import('./modules/login.js'),              screen: 'screen-login',             tab: null },
+  { path: '/register',                loader: () => import('./modules/register.js'),           screen: 'screen-register',          tab: null },
 
   // Customer
   { path: '/customer/home',           loader: () => import('./modules/customer/home.js'),      screen: 'screen-customer-home',     tab: 'customer' },
@@ -18,6 +19,11 @@ const routes = [
   { path: '/customer/history',        loader: () => import('./modules/customer/history.js'),   screen: 'screen-customer-history',  tab: 'customer' },
   { path: '/customer/wallet',         loader: () => import('./modules/customer/wallet.js'),    screen: 'screen-customer-wallet',   tab: 'customer' },
   { path: '/customer/profile',        loader: () => import('./modules/customer/profile.js'),   screen: 'screen-customer-profile',  tab: 'customer' },
+  { path: '/customer/referrals',      loader: () => import('./modules/customer/referrals.js'), screen: 'screen-customer-referrals', tab: 'customer' },
+  { path: '/customer/notifications',  loader: () => import('./modules/customer/notifications.js'), screen: 'screen-customer-notifications', tab: 'customer' },
+  { path: '/customer/subscriptions',  loader: () => import('./modules/customer/subscriptions.js'), screen: 'screen-customer-subscriptions', tab: 'customer' },
+  { path: '/customer/disputes',       loader: () => import('./modules/customer/disputes.js'),  screen: 'screen-customer-disputes', tab: 'customer' },
+  { path: '/customer/favourites',     loader: () => import('./modules/customer/favourites.js'), screen: 'screen-customer-favourites', tab: 'customer' },
 
   // Helper
   { path: '/helper/home',             loader: () => import('./modules/helper/home.js'),        screen: 'screen-helper-home',       tab: 'helper' },
@@ -25,6 +31,7 @@ const routes = [
   { path: '/helper/active/:id',       loader: () => import('./modules/helper/active.js'),      screen: 'screen-helper-active',     tab: 'helper' },
   { path: '/helper/earnings',         loader: () => import('./modules/helper/earnings.js'),    screen: 'screen-helper-earnings',   tab: 'helper' },
   { path: '/helper/profile',          loader: () => import('./modules/helper/profile.js'),     screen: 'screen-helper-profile',    tab: 'helper' },
+  { path: '/helper/notifications',    loader: () => import('./modules/customer/notifications.js'), screen: 'screen-helper-notifications', tab: 'helper' },
 
   // Admin
   { path: '/admin/dashboard',         loader: () => import('./modules/admin/dashboard.js'),    screen: 'screen-admin-dashboard',   tab: 'admin' },
@@ -33,6 +40,9 @@ const routes = [
   { path: '/admin/helpers',           loader: () => import('./modules/admin/helpers.js'),      screen: 'screen-admin-helpers',     tab: 'admin' },
   { path: '/admin/payments',          loader: () => import('./modules/admin/payments.js'),     screen: 'screen-admin-payments',    tab: 'admin' },
   { path: '/admin/config',            loader: () => import('./modules/admin/config.js'),       screen: 'screen-admin-config',      tab: 'admin' },
+  { path: '/admin/disputes',          loader: () => import('./modules/admin/disputes.js'),     screen: 'screen-admin-disputes',    tab: 'admin' },
+  { path: '/admin/subscriptions',     loader: () => import('./modules/admin/subscriptions.js'), screen: 'screen-admin-subscriptions', tab: 'admin' },
+  { path: '/admin/referrals',         loader: () => import('./modules/admin/referrals.js'),    screen: 'screen-admin-referrals',   tab: 'admin' },
 ];
 
 // Build regex matchers once
@@ -89,13 +99,13 @@ export const router = {
     }
 
     // Not logged in → force login screen
-    if (!auth.isLoggedIn() && path !== '/login') {
+    if (!auth.isLoggedIn() && path !== '/login' && path !== '/register') {
       this.navigate('/login');
       return;
     }
 
-    // Logged in but on /login → redirect to role default
-    if (auth.isLoggedIn() && path === '/login') {
+    // Logged in but on /login or /register → redirect to role default
+    if (auth.isLoggedIn() && (path === '/login' || path === '/register')) {
       this.navigate(this._defaultRoute());
       return;
     }
@@ -205,8 +215,9 @@ export const router = {
   _showScreen(screenId, tabName) {
     // Hide all tabs
     document.querySelectorAll('.tab').forEach(t => t.classList.add('hidden'));
-    // Hide login screen
+    // Hide login & register screens
     document.getElementById('screen-login').classList.add('hidden');
+    document.getElementById('screen-register').classList.add('hidden');
     // Hide all screens within tabs
     document.querySelectorAll('.tab .screen').forEach(s => s.classList.add('hidden'));
 

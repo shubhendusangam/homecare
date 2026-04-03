@@ -56,6 +56,9 @@ export async function render(container) {
       <a href="#/admin/users"     class="sub-nav-btn">Users</a>
       <a href="#/admin/helpers"   class="sub-nav-btn">Helpers</a>
       <a href="#/admin/payments"  class="sub-nav-btn">Payments</a>
+      <a href="#/admin/disputes"  class="sub-nav-btn">Disputes</a>
+      <a href="#/admin/referrals" class="sub-nav-btn">Referrals</a>
+      <a href="#/admin/subscriptions" class="sub-nav-btn">Subs</a>
       <a href="#/admin/config"    class="sub-nav-btn">Config</a>
     </nav>
 
@@ -66,6 +69,14 @@ export async function render(container) {
       <div class="stat-card"><div class="stat-value" id="kpi-online">—</div><div class="stat-label">Online Helpers</div></div>
       <div class="stat-card"><div class="stat-value" id="kpi-revenue">—</div><div class="stat-label">Today Revenue</div></div>
       <div class="stat-card"><div class="stat-value" id="kpi-pending">—</div><div class="stat-label">Pending Verify</div></div>
+    </div>
+
+    <!-- Secondary KPIs -->
+    <div class="stats-grid" style="margin-bottom:1.5rem">
+      <div class="stat-card" style="cursor:pointer" onclick="location.hash='#/admin/disputes'"><div class="stat-value" id="kpi-disputes">—</div><div class="stat-label">⚖️ Open Disputes</div></div>
+      <div class="stat-card" style="cursor:pointer" onclick="location.hash='#/admin/referrals'"><div class="stat-value" id="kpi-referrals">—</div><div class="stat-label">🎁 Referral Signups</div></div>
+      <div class="stat-card" style="cursor:pointer" onclick="location.hash='#/admin/subscriptions'"><div class="stat-value" id="kpi-subs">—</div><div class="stat-label">📋 Active Subs</div></div>
+      <div class="stat-card"><div class="stat-value" id="kpi-chat">—</div><div class="stat-label">💬 Messages Today</div></div>
     </div>
 
     <!-- Live Map -->
@@ -138,6 +149,16 @@ async function refreshKPIs() {
     if (kpiOnline) kpiOnline.textContent = d.onlineHelpers || 0;
     if (kpiRevenue) kpiRevenue.textContent = '₹' + (parseFloat(d.todayRevenue) || 0).toLocaleString('en-IN');
     if (kpiPending) kpiPending.textContent = d.pendingVerifications || 0;
+
+    // Secondary KPIs
+    const kpiDisputes = el('kpi-disputes');
+    const kpiReferrals = el('kpi-referrals');
+    const kpiSubs = el('kpi-subs');
+    const kpiChat = el('kpi-chat');
+    if (kpiDisputes) kpiDisputes.textContent = d.openDisputes || 0;
+    if (kpiReferrals) kpiReferrals.textContent = d.referralSignups || 0;
+    if (kpiSubs) kpiSubs.textContent = d.activeSubscriptions || 0;
+    if (kpiChat) kpiChat.textContent = d.messagesToday || 0;
 
     // Update charts data if available
     if (d.bookingsByService && bookingsChart) {

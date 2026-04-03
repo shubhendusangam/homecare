@@ -11,7 +11,10 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Entity
-@Table(name = "helper_profiles")
+@Table(name = "helper_profiles", indexes = {
+        @Index(name = "idx_helpers_status_city", columnList = "status, city"),
+        @Index(name = "idx_helpers_lat_lng", columnList = "latitude, longitude")
+})
 @Getter
 @Setter
 @NoArgsConstructor

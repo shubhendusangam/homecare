@@ -12,13 +12,12 @@ spring:
     hibernate:
       ddl-auto: create-drop
     show-sql: true
-    defer-datasource-initialization: true
     properties:
       hibernate:
         format_sql: true
   sql:
     init:
-      mode: always
+      mode: never
 
 logging:
   level:

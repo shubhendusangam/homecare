@@ -5,11 +5,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.homecare.core.exception.ResourceNotFoundException;
 import com.homecare.notification.config.NotificationTemplates;
 import com.homecare.notification.dto.NotificationResponse;
-import com.homecare.notification.email.EmailService;
 import com.homecare.notification.entity.Notification;
 import com.homecare.notification.enums.NotificationType;
 import com.homecare.notification.repository.NotificationRepository;
-import com.homecare.notification.sms.SmsService;
 import com.homecare.notification.websocket.WebSocketNotificationPusher;
 import com.homecare.user.entity.User;
 import com.homecare.user.enums.Role;
@@ -17,7 +15,6 @@ import com.homecare.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -35,8 +32,7 @@ public class NotificationServiceImpl implements NotificationService {
     private final UserRepository userRepository;
     private final NotificationTemplates templates;
     private final WebSocketNotificationPusher webSocketPusher;
-    private final EmailService emailService;
-    private final SmsService smsService;
+    private final AsyncNotificationDispatcher asyncDispatcher;
     private final ObjectMapper objectMapper;
 
     @Override
@@ -53,7 +49,7 @@ public class NotificationServiceImpl implements NotificationService {
         String actionUrl = templates.resolve(templates.getActionUrl(type), resolvedVars);
         String metadata = serializeMetadata(resolvedVars);
 
-        // 2. Persist to DB
+        // 2. Persist to DB — synchronous (inside calling transaction)
         Notification notification = Notification.builder()
                 .user(user)
                 .type(type)
@@ -67,14 +63,14 @@ public class NotificationServiceImpl implements NotificationService {
 
         NotificationResponse response = toDto(notification);
 
-        // 3. WebSocket push
+        // 3. WebSocket push — synchronous (fast, <5ms, user needs this immediately)
         webSocketPusher.push(userId, response);
 
-        // 4. Email (async, only for certain types)
-        sendEmailIfApplicable(user, type, resolvedVars, title);
+        // 4. Email — async (slow SMTP I/O, offloaded to notificationExecutor)
+        dispatchEmailAsync(notification.getId(), user, type, resolvedVars, title);
 
-        // 5. SMS (for high-priority notifications)
-        sendSmsIfApplicable(user, type, body);
+        // 5. SMS — async (slow HTTP to SMS provider, offloaded to notificationExecutor)
+        dispatchSmsAsync(notification.getId(), user, type, body);
 
         log.info("Notification sent: type={}, userId={}, title='{}'", type, userId, title);
     }
@@ -108,10 +104,10 @@ public class NotificationServiceImpl implements NotificationService {
         }
     }
 
-    // ─── Email dispatch ───────────────────────────────────────────────
+    // ─── Async email dispatch ──────────────────────────────────────────
 
-    private void sendEmailIfApplicable(User user, NotificationType type,
-                                       Map<String, String> vars, String subject) {
+    private void dispatchEmailAsync(UUID notificationId, User user, NotificationType type,
+                                    Map<String, String> vars, String subject) {
         String templateName = templates.getEmailTemplateName(type);
         if (templateName == null) return;
 
@@ -119,13 +115,12 @@ public class NotificationServiceImpl implements NotificationService {
         emailModel.put("userName", user.getName() != null ? user.getName() : "User");
         emailModel.put("userEmail", user.getEmail());
 
-        emailService.sendHtmlEmail(user.getEmail(), subject, templateName, emailModel);
+        asyncDispatcher.sendEmail(notificationId, user.getEmail(), subject, templateName, emailModel);
     }
 
-    // ─── SMS dispatch ─────────────────────────────────────────────────
+    // ─── Async SMS dispatch ────────────────────────────────────────────
 
-    private void sendSmsIfApplicable(User user, NotificationType type, String body) {
-        // Only send SMS for high-priority notification types
+    private void dispatchSmsAsync(UUID notificationId, User user, NotificationType type, String body) {
         if (user.getPhone() == null) return;
 
         boolean highPriority = switch (type) {
@@ -134,7 +129,7 @@ public class NotificationServiceImpl implements NotificationService {
         };
 
         if (highPriority) {
-            smsService.send(user.getPhone(), body);
+            asyncDispatcher.sendSms(notificationId, user.getPhone(), body);
         }
     }
 

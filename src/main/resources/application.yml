@@ -79,6 +79,11 @@ homecare:
       enabled: ${MAIL_ENABLED:false}
     sms:
       enabled: ${SMS_ENABLED:false}
+  referral:
+    referrer-credit: 100.00
+    referee-credit: 50.00
+    code-length: 8
+    signup-expiry-days: 30
 
 logging:
   config: classpath:logback-spring.xml

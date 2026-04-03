@@ -44,5 +44,17 @@ public class Notification extends BaseEntity {
 
     @Column(length = 2000)
     private String metadata;
+
+    // ─── Delivery tracking ─────────────────────────────────────────────
+
+    private Instant emailSentAt;
+
+    @Builder.Default
+    private boolean emailFailed = false;
+
+    private Instant smsSentAt;
+
+    @Builder.Default
+    private boolean smsFailed = false;
 }
 

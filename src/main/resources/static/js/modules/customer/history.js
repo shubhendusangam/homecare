@@ -123,6 +123,9 @@ async function openDetail(bookingId) {
   const icon = SERVICE_ICON[booking.serviceType] || '📦';
   const canReview = booking.status === 'COMPLETED' && !booking.rating;
 
+  const canCancel = ['PENDING_ASSIGNMENT', 'ASSIGNED'].includes(booking.status);
+  const canDispute = ['IN_PROGRESS', 'COMPLETED', 'CANCELLED'].includes(booking.status);
+
   const slot = document.getElementById('modal-slot');
   slot.innerHTML = `
     <div class="modal-overlay" id="detail-overlay">
@@ -169,8 +172,10 @@ async function openDetail(bookingId) {
           ${booking.reviewText ? `<p style="font-size:.85rem;margin-top:.25rem" id="det-review-text"></p>` : ''}
         </div>` : ''}
 
-        <div style="display:flex;gap:.5rem;margin-top:1rem">
+        <div style="display:flex;gap:.5rem;margin-top:1rem;flex-wrap:wrap">
           <button class="btn btn-primary btn-sm" id="btn-book-again">Book Again</button>
+          ${canCancel ? '<button class="btn btn-danger btn-sm" id="btn-cancel-booking" style="font-size:.8rem">Cancel Booking</button>' : ''}
+          ${canDispute ? '<button class="btn btn-outline btn-sm" id="btn-raise-dispute">⚖️ Report Issue</button>' : ''}
           <button class="btn btn-outline btn-sm" id="btn-modal-close2">Close</button>
         </div>
       </div>
@@ -202,6 +207,30 @@ async function openDetail(bookingId) {
     closeModal();
     router.navigate('/customer/book?service=' + booking.serviceType + '&duration=' + booking.durationHours);
   });
+
+  // Cancel booking
+  const cancelBtn = document.getElementById('btn-cancel-booking');
+  if (cancelBtn) {
+    cancelBtn.addEventListener('click', async () => {
+      if (!confirm('Are you sure you want to cancel this booking? Refund policy depends on booking status.')) return;
+      cancelBtn.disabled = true; cancelBtn.textContent = 'Cancelling…';
+      try {
+        await api.patch('/bookings/' + booking.id + '/cancel');
+        toast('Booking cancelled', 'info');
+        closeModal();
+        loadPage();
+      } catch { cancelBtn.disabled = false; cancelBtn.textContent = 'Cancel Booking'; }
+    });
+  }
+
+  // Raise dispute
+  const disputeBtn = document.getElementById('btn-raise-dispute');
+  if (disputeBtn) {
+    disputeBtn.addEventListener('click', () => {
+      closeModal();
+      showDisputeForm(booking.id);
+    });
+  }
 
   // Star rating interaction
   if (canReview) {
@@ -253,3 +282,44 @@ function timelineItem(label, isoDate, active) {
     <div class="tl-time">${fmtDate(isoDate)}</div>
   </div>`;
 }
+
+function showDisputeForm(bookingId) {
+  const slot = document.getElementById('modal-slot');
+  slot.innerHTML = `
+    <div class="modal-overlay" id="dispute-overlay">
+      <div class="modal-card">
+        <div class="modal-header"><h3>⚖️ Report an Issue</h3><button class="modal-close" id="disp-close">&times;</button></div>
+        <div class="form-group"><label>Issue Type</label>
+          <select class="form-control" id="disp-type">
+            <option value="QUALITY_ISSUE">Quality Issue</option>
+            <option value="OVERCHARGE">Overcharge</option>
+            <option value="NO_SHOW">No Show</option>
+            <option value="SAFETY_CONCERN">Safety Concern</option>
+            <option value="OTHER">Other</option>
+          </select>
+        </div>
+        <div class="form-group"><label>Description</label>
+          <textarea class="form-control" id="disp-desc" rows="3" placeholder="Describe the issue…"></textarea>
+        </div>
+        <button class="btn btn-primary btn-block" id="disp-submit">Submit Dispute</button>
+      </div>
+    </div>`;
+  document.getElementById('disp-close').addEventListener('click', () => { slot.innerHTML = ''; });
+  document.getElementById('dispute-overlay').addEventListener('click', e => { if (e.target.id === 'dispute-overlay') slot.innerHTML = ''; });
+  document.getElementById('disp-submit').addEventListener('click', async () => {
+    const desc = document.getElementById('disp-desc').value.trim();
+    if (!desc) { toast('Please describe the issue', 'warn'); return; }
+    const btn = document.getElementById('disp-submit');
+    btn.disabled = true; btn.textContent = 'Submitting…';
+    try {
+      await api.post('/disputes', {
+        bookingId,
+        disputeType: document.getElementById('disp-type').value,
+        description: desc
+      });
+      toast('Dispute submitted. We\'ll review it soon.', 'success');
+      slot.innerHTML = '';
+    } catch { btn.disabled = false; btn.textContent = 'Submit Dispute'; }
+  });
+}
+

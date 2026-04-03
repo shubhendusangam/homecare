@@ -41,6 +41,8 @@ public class BookingResponse {
     private int rating;
     private String reviewText;
 
+    private UUID subscriptionId;
+
     private Instant createdAt;
     private Instant updatedAt;
 }

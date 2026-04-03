@@ -29,6 +29,8 @@ public interface HelperProfileRepository extends JpaRepository<HelperProfile, UU
     @Query("""
         SELECT h FROM HelperProfile h WHERE h.status = 'ONLINE'
         AND :serviceType MEMBER OF h.skills
+        AND h.latitude BETWEEN :minLat AND :maxLat
+        AND h.longitude BETWEEN :minLng AND :maxLng
         AND (6371 * acos(
             cos(radians(:lat)) * cos(radians(h.latitude))
             * cos(radians(h.longitude) - radians(:lng))
@@ -44,7 +46,11 @@ public interface HelperProfileRepository extends JpaRepository<HelperProfile, UU
             @Param("serviceType") ServiceType serviceType,
             @Param("lat") double lat,
             @Param("lng") double lng,
-            @Param("radiusKm") double radiusKm);
+            @Param("radiusKm") double radiusKm,
+            @Param("minLat") double minLat,
+            @Param("maxLat") double maxLat,
+            @Param("minLng") double minLng,
+            @Param("maxLng") double maxLng);
 
     @Query("SELECT h FROM HelperProfile h WHERE h.status = :status " +
            "AND h.lastLocationUpdate IS NOT NULL AND h.lastLocationUpdate < :cutoff")

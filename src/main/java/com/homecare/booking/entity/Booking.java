@@ -2,6 +2,7 @@ package com.homecare.booking.entity;
 
 import com.homecare.core.entity.BaseEntity;
 import com.homecare.core.enums.*;
+import com.homecare.subscription.entity.CustomerSubscription;
 import com.homecare.user.entity.User;
 import jakarta.persistence.*;
 import lombok.*;
@@ -9,7 +10,12 @@ import lombok.*;
 import java.time.Instant;
 
 @Entity
-@Table(name = "bookings")
+@Table(name = "bookings", indexes = {
+        @Index(name = "idx_bookings_customer_status", columnList = "customer_id, status"),
+        @Index(name = "idx_bookings_helper_status", columnList = "helper_id, status"),
+        @Index(name = "idx_bookings_status_created", columnList = "status, created_at"),
+        @Index(name = "idx_bookings_scheduled_at", columnList = "scheduled_at")
+})
 @Getter
 @Setter
 @NoArgsConstructor
@@ -70,5 +76,9 @@ public class Booking extends BaseEntity {
 
     @Column(length = 2000)
     private String reviewText;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "subscription_id")
+    private CustomerSubscription subscription;
 }
 

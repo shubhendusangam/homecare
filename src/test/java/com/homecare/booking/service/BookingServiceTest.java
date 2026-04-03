@@ -17,8 +17,11 @@ import com.homecare.user.entity.HelperProfile;
 import com.homecare.user.entity.User;
 import com.homecare.user.enums.HelperStatus;
 import com.homecare.user.enums.Role;
+import com.homecare.user.repository.FavouriteHelperRepository;
 import com.homecare.user.repository.HelperProfileRepository;
 import com.homecare.user.repository.UserRepository;
+import com.homecare.user.service.FavouriteHelperService;
+import com.homecare.user.service.HelperAvailabilityService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -55,6 +58,11 @@ class BookingServiceTest {
     @Mock private PaymentService paymentService;
     @Mock private BookingResponseMapper bookingResponseMapper;
     @Mock private BookingStateMachine stateMachine;
+    @Mock private com.homecare.subscription.service.SubscriptionService subscriptionService;
+    @Mock private com.homecare.subscription.repository.CustomerSubscriptionRepository customerSubscriptionRepository;
+    @Mock private FavouriteHelperRepository favouriteHelperRepository;
+    @Mock private FavouriteHelperService favouriteHelperService;
+    @Mock private HelperAvailabilityService helperAvailabilityService;
 
     @InjectMocks private BookingService bookingService;
 
@@ -247,7 +255,8 @@ class BookingServiceTest {
             when(bookingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
             when(statusHistoryRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
             when(bookingConfig.getBooking()).thenReturn(bookingSettings);
-            when(helperProfileRepository.findNearbyAvailableHelpers(any(), anyDouble(), anyDouble(), anyDouble()))
+            when(helperProfileRepository.findNearbyAvailableHelpers(any(), anyDouble(), anyDouble(), anyDouble(),
+                    anyDouble(), anyDouble(), anyDouble(), anyDouble()))
                     .thenReturn(List.of());
             when(bookingResponseMapper.toDto(any())).thenReturn(BookingResponse.builder().build());
 
@@ -399,6 +408,231 @@ class BookingServiceTest {
 
         assertThrows(ResourceNotFoundException.class,
                 () -> bookingService.getBooking(nonExistent, customer.getId()));
+    }
+
+    // ─── Preferred helper (requestedHelperId) ──────────────────────
+
+    @Nested
+    @DisplayName("RequestedHelper")
+    class RequestedHelper {
+
+        @Test
+        @DisplayName("createBooking with requestedHelperId assigns that helper if available")
+        void requestedHelperHappyPath() {
+            CreateBookingRequest request = new CreateBookingRequest();
+            request.setServiceType(ServiceType.CLEANING);
+            request.setBookingType(BookingType.IMMEDIATE);
+            request.setAddressLine("123 Main St");
+            request.setLatitude(28.61);
+            request.setLongitude(77.21);
+            request.setDurationHours(2);
+            request.setRequestedHelperId(helper.getId());
+
+            when(userRepository.findById(customer.getId())).thenReturn(Optional.of(customer));
+            when(bookingConfig.getBasePrice(ServiceType.CLEANING)).thenReturn(299.0);
+            when(bookingConfig.computeTotalPrice(ServiceType.CLEANING, 2)).thenReturn(597.0);
+            when(bookingRepository.save(any(Booking.class))).thenAnswer(inv -> {
+                Booking b = inv.getArgument(0);
+                if (b.getId() == null) b.setId(UUID.randomUUID());
+                return b;
+            });
+            when(statusHistoryRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+            when(favouriteHelperRepository.existsByCustomerIdAndHelperId(customer.getId(), helper.getId()))
+                    .thenReturn(true);
+            when(userRepository.findById(helper.getId())).thenReturn(Optional.of(helper));
+            when(helperProfileRepository.findByUserId(helper.getId()))
+                    .thenReturn(Optional.of(helperProfile));
+            when(bookingRepository.hasActiveBooking(helper.getId())).thenReturn(false);
+            when(helperProfileRepository.save(any())).thenReturn(helperProfile);
+            when(bookingConfig.getBooking()).thenReturn(bookingSettings);
+            when(helperAvailabilityService.isHelperAvailableAt(eq(helper.getId()), any()))
+                    .thenReturn(true);
+            when(bookingResponseMapper.toDto(any())).thenReturn(BookingResponse.builder().build());
+
+            BookingResponse response = bookingService.createBooking(request, customer.getId());
+
+            assertNotNull(response);
+            verify(favouriteHelperRepository).existsByCustomerIdAndHelperId(customer.getId(), helper.getId());
+        }
+
+        @Test
+        @DisplayName("createBooking with requestedHelperId who is OFFLINE → throws 422")
+        void requestedHelperOffline() {
+            helperProfile.setStatus(HelperStatus.OFFLINE);
+
+            CreateBookingRequest request = new CreateBookingRequest();
+            request.setServiceType(ServiceType.CLEANING);
+            request.setBookingType(BookingType.IMMEDIATE);
+            request.setAddressLine("123 Main St");
+            request.setLatitude(28.61);
+            request.setLongitude(77.21);
+            request.setDurationHours(2);
+            request.setRequestedHelperId(helper.getId());
+
+            when(userRepository.findById(customer.getId())).thenReturn(Optional.of(customer));
+            when(bookingConfig.getBasePrice(ServiceType.CLEANING)).thenReturn(299.0);
+            when(bookingConfig.computeTotalPrice(ServiceType.CLEANING, 2)).thenReturn(597.0);
+            when(bookingRepository.save(any(Booking.class))).thenAnswer(inv -> {
+                Booking b = inv.getArgument(0);
+                if (b.getId() == null) b.setId(UUID.randomUUID());
+                return b;
+            });
+            when(statusHistoryRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+            when(favouriteHelperRepository.existsByCustomerIdAndHelperId(customer.getId(), helper.getId()))
+                    .thenReturn(true);
+            when(userRepository.findById(helper.getId())).thenReturn(Optional.of(helper));
+            when(helperProfileRepository.findByUserId(helper.getId()))
+                    .thenReturn(Optional.of(helperProfile));
+
+            BusinessException ex = assertThrows(BusinessException.class,
+                    () -> bookingService.createBooking(request, customer.getId()));
+            assertEquals(ErrorCode.PREFERRED_HELPER_UNAVAILABLE, ex.getErrorCode());
+        }
+
+        @Test
+        @DisplayName("auto-assign checks favourites first before haversine sort")
+        void autoAssignFavouritePriority() {
+            User favHelper = User.builder().name("Fav Helper").email("fav@test.com").role(Role.HELPER).build();
+            favHelper.setId(UUID.randomUUID());
+            HelperProfile favProfile = HelperProfile.builder()
+                    .user(favHelper).skills(List.of(ServiceType.CLEANING))
+                    .status(HelperStatus.ONLINE).available(true)
+                    .latitude(28.62).longitude(77.22).rating(4.0).build();
+            favProfile.setId(UUID.randomUUID());
+
+            // Non-favourite helper is closer (comes first in haversine sort)
+            User closerHelper = User.builder().name("Closer Helper").email("closer@test.com").role(Role.HELPER).build();
+            closerHelper.setId(UUID.randomUUID());
+            HelperProfile closerProfile = HelperProfile.builder()
+                    .user(closerHelper).skills(List.of(ServiceType.CLEANING))
+                    .status(HelperStatus.ONLINE).available(true)
+                    .latitude(28.605).longitude(77.205).rating(4.9).build();
+            closerProfile.setId(UUID.randomUUID());
+
+            when(bookingConfig.getBooking()).thenReturn(bookingSettings);
+            when(helperProfileRepository.findNearbyAvailableHelpers(any(), anyDouble(), anyDouble(), anyDouble(),
+                    anyDouble(), anyDouble(), anyDouble(), anyDouble()))
+                    .thenReturn(List.of(closerProfile, favProfile)); // closer first
+            when(bookingRepository.hasActiveBooking(any())).thenReturn(false);
+            when(helperAvailabilityService.isHelperAvailableAt(any(), any()))
+                    .thenReturn(true);
+            when(favouriteHelperRepository.findHelperIdsByCustomerId(customer.getId()))
+                    .thenReturn(List.of(favHelper.getId()));
+            when(helperProfileRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+            when(statusHistoryRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+            bookingService.findAndAssignHelper(booking);
+
+            // Favourite helper should be assigned, not the closer one
+            assertEquals(favHelper, booking.getHelper());
+            assertEquals(BookingStatus.ASSIGNED, booking.getStatus());
+        }
+    }
+
+    // ─── Availability-filtered assignment ──────────────────────────────
+
+    @Nested
+    @DisplayName("AvailabilityFiltered")
+    class AvailabilityFiltered {
+
+        @Test
+        @DisplayName("findAndAssignHelper only returns helpers available at booking time")
+        void findAndAssignHelper_skipsHelperOutsideSlot() {
+            when(bookingConfig.getBooking()).thenReturn(bookingSettings);
+            when(helperProfileRepository.findNearbyAvailableHelpers(any(), anyDouble(), anyDouble(), anyDouble(),
+                    anyDouble(), anyDouble(), anyDouble(), anyDouble()))
+                    .thenReturn(List.of(helperProfile));
+            when(bookingRepository.hasActiveBooking(helper.getId())).thenReturn(false);
+            // Helper is outside their availability slot
+            when(helperAvailabilityService.isHelperAvailableAt(eq(helper.getId()), any()))
+                    .thenReturn(false);
+
+            bookingService.findAndAssignHelper(booking);
+
+            // No helper assigned because the only candidate was outside availability
+            assertNull(booking.getHelper());
+            assertEquals(BookingStatus.PENDING_ASSIGNMENT, booking.getStatus());
+        }
+
+        @Test
+        @DisplayName("findAndAssignHelper assigns helper who is within availability slot")
+        void findAndAssignHelper_assignsAvailableHelper() {
+            when(bookingConfig.getBooking()).thenReturn(bookingSettings);
+            when(helperProfileRepository.findNearbyAvailableHelpers(any(), anyDouble(), anyDouble(), anyDouble(),
+                    anyDouble(), anyDouble(), anyDouble(), anyDouble()))
+                    .thenReturn(List.of(helperProfile));
+            when(bookingRepository.hasActiveBooking(helper.getId())).thenReturn(false);
+            when(helperAvailabilityService.isHelperAvailableAt(eq(helper.getId()), any()))
+                    .thenReturn(true);
+            when(favouriteHelperRepository.findHelperIdsByCustomerId(customer.getId()))
+                    .thenReturn(List.of());
+            when(helperProfileRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+            when(statusHistoryRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+            bookingService.findAndAssignHelper(booking);
+
+            assertEquals(helper, booking.getHelper());
+            assertEquals(BookingStatus.ASSIGNED, booking.getStatus());
+        }
+
+        @Test
+        @DisplayName("scheduled booking at 11 PM finds no helpers if no night slots")
+        void scheduledBookingLateNight_noHelpers() {
+            booking.setBookingType(BookingType.SCHEDULED);
+            booking.setScheduledAt(Instant.now().plus(java.time.Duration.ofDays(1))); // tomorrow
+
+            when(bookingConfig.getBooking()).thenReturn(bookingSettings);
+            when(helperProfileRepository.findNearbyAvailableHelpers(any(), anyDouble(), anyDouble(), anyDouble(),
+                    anyDouble(), anyDouble(), anyDouble(), anyDouble()))
+                    .thenReturn(List.of(helperProfile));
+            when(bookingRepository.hasActiveBooking(helper.getId())).thenReturn(false);
+            when(helperAvailabilityService.isHelperAvailableAt(eq(helper.getId()),
+                    eq(booking.getScheduledAt()))).thenReturn(false);
+
+            bookingService.findAndAssignHelper(booking);
+
+            assertNull(booking.getHelper());
+            assertEquals(BookingStatus.PENDING_ASSIGNMENT, booking.getStatus());
+        }
+
+        @Test
+        @DisplayName("assignRequestedHelper throws when helper's slot doesn't cover booking time")
+        void requestedHelper_outsideAvailability() {
+            Instant futureNight = Instant.now().plus(java.time.Duration.ofDays(1));
+
+            CreateBookingRequest request = new CreateBookingRequest();
+            request.setServiceType(ServiceType.CLEANING);
+            request.setBookingType(BookingType.SCHEDULED);
+            request.setScheduledAt(futureNight);
+            request.setAddressLine("123 Main St");
+            request.setLatitude(28.61);
+            request.setLongitude(77.21);
+            request.setDurationHours(2);
+            request.setRequestedHelperId(helper.getId());
+
+            when(userRepository.findById(customer.getId())).thenReturn(Optional.of(customer));
+            when(bookingConfig.getBasePrice(ServiceType.CLEANING)).thenReturn(299.0);
+            when(bookingConfig.computeTotalPrice(ServiceType.CLEANING, 2)).thenReturn(597.0);
+            when(bookingConfig.getBooking()).thenReturn(bookingSettings);
+            when(bookingRepository.save(any(Booking.class))).thenAnswer(inv -> {
+                Booking b = inv.getArgument(0);
+                if (b.getId() == null) b.setId(UUID.randomUUID());
+                return b;
+            });
+            when(statusHistoryRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+            when(favouriteHelperRepository.existsByCustomerIdAndHelperId(customer.getId(), helper.getId()))
+                    .thenReturn(true);
+            when(userRepository.findById(helper.getId())).thenReturn(Optional.of(helper));
+            when(helperProfileRepository.findByUserId(helper.getId()))
+                    .thenReturn(Optional.of(helperProfile));
+            // Helper is ONLINE but outside availability
+            when(helperAvailabilityService.isHelperAvailableAt(eq(helper.getId()), any()))
+                    .thenReturn(false);
+
+            BusinessException ex = assertThrows(BusinessException.class,
+                    () -> bookingService.createBooking(request, customer.getId()));
+            assertEquals(ErrorCode.HELPER_OUTSIDE_AVAILABILITY, ex.getErrorCode());
+        }
     }
 }
 

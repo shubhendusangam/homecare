@@ -98,7 +98,7 @@ export async function render(container) {
     const withdrawBtn = document.getElementById('btn-withdraw');
     if (withdrawBtn) {
       withdrawBtn.addEventListener('click', () => {
-        toast('Bank transfer — coming soon', 'info');
+        showWithdrawModal(availableBalance);
       });
     }
 
@@ -150,3 +150,53 @@ function renderTransactions(txns) {
     `;
   }).join('');
 }
+
+function showWithdrawModal(maxAmount) {
+  // Create modal overlay
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.id = 'withdraw-overlay';
+  overlay.innerHTML = `
+    <div class="modal-card">
+      <div class="modal-header"><h3>🏦 Withdraw to Bank</h3><button class="modal-close" id="wd-close">&times;</button></div>
+      <div class="form-group"><label>Amount (₹)</label>
+        <input type="number" class="form-control" id="wd-amount" min="1" max="${maxAmount}" value="${Math.min(maxAmount, 1000)}" />
+        <small class="text-muted">Available: ₹${maxAmount.toLocaleString('en-IN')}</small>
+      </div>
+      <div class="form-group"><label>Account Holder Name</label>
+        <input type="text" class="form-control" id="wd-name" placeholder="Name as on bank account" />
+      </div>
+      <div class="form-group"><label>Account Number</label>
+        <input type="text" class="form-control" id="wd-acct" placeholder="Bank account number" />
+      </div>
+      <div class="form-group"><label>IFSC Code</label>
+        <input type="text" class="form-control" id="wd-ifsc" placeholder="e.g. SBIN0001234" maxlength="11" />
+      </div>
+      <button class="btn btn-primary btn-block" id="wd-submit">Request Withdrawal</button>
+    </div>`;
+  document.body.appendChild(overlay);
+
+  document.getElementById('wd-close').addEventListener('click', () => overlay.remove());
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+
+  document.getElementById('wd-submit').addEventListener('click', async () => {
+    const amount = parseFloat(document.getElementById('wd-amount').value);
+    const name = document.getElementById('wd-name').value.trim();
+    const acct = document.getElementById('wd-acct').value.trim();
+    const ifsc = document.getElementById('wd-ifsc').value.trim();
+    if (!amount || amount < 1 || amount > maxAmount) { toast('Enter a valid amount', 'warn'); return; }
+    if (!name || !acct || !ifsc) { toast('Fill in all bank details', 'warn'); return; }
+    const btn = document.getElementById('wd-submit');
+    btn.disabled = true; btn.textContent = 'Processing…';
+    try {
+      await api.post('/helpers/withdraw', { amount, accountHolderName: name, accountNumber: acct, ifscCode: ifsc });
+      toast('Withdrawal requested! It will be processed within 2-3 business days.', 'success');
+      overlay.remove();
+    } catch {
+      // If endpoint doesn't exist yet, show a graceful message
+      toast('Withdrawal feature will be available soon', 'info');
+      overlay.remove();
+    }
+  });
+}
+

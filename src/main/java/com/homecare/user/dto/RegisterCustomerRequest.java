@@ -24,5 +24,10 @@ public class RegisterCustomerRequest {
     @NotBlank(message = "Password is required")
     @ValidPassword
     private String password;
+
+    /**
+     * Optional referral code from an existing user.
+     */
+    private String referralCode;
 }
 

@@ -325,6 +325,37 @@ public class WalletService {
                 .build();
     }
 
+    // ─── Debit for Subscription (direct deduction, no hold) ──────────
+
+    @Transactional
+    public void debitForSubscription(UUID userId, BigDecimal amount, UUID subscriptionId) {
+        Wallet wallet = getOrCreateWallet(userId);
+
+        if (wallet.getAvailableBalance().compareTo(amount) < 0) {
+            throw new BusinessException(
+                    "Insufficient wallet balance. Available: ₹" + wallet.getAvailableBalance()
+                            + ", Required: ₹" + amount,
+                    ErrorCode.INSUFFICIENT_WALLET_BALANCE);
+        }
+
+        wallet.setBalance(wallet.getBalance().subtract(amount));
+        walletRepository.save(wallet);
+
+        WalletTransaction transaction = WalletTransaction.builder()
+                .wallet(wallet)
+                .type(TransactionType.DEBIT_SUBSCRIPTION)
+                .status(TransactionStatus.SUCCESS)
+                .amount(amount)
+                .description("Subscription payment for subscription " + subscriptionId)
+                .processedAt(Instant.now())
+                .build();
+        transactionRepository.save(transaction);
+
+        log.info("Subscription debited: userId={}, subscriptionId={}, amount={}", userId, subscriptionId, amount);
+        eventPublisher.publishEvent(AuditEvent.of("SUBSCRIPTION_DEBIT", userId,
+                Map.of("subscriptionId", subscriptionId, "amount", amount)));
+    }
+
     // ─── Private Helpers ──────────────────────────────────────────────
 
 

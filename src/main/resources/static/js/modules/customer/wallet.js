@@ -10,10 +10,12 @@ function fmtDate(iso) { return iso ? new Date(iso).toLocaleString(undefined, { d
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 const TXN_ICON = {
-  CREDIT_TOPUP:   '💰',
-  DEBIT_BOOKING:  '📤',
-  REFUND:         '↩️',
-  CREDIT_EARNING: '💵',
+  CREDIT_TOPUP:       '💰',
+  DEBIT_BOOKING:      '📤',
+  DEBIT_SUBSCRIPTION: '📋',
+  REFUND:             '↩️',
+  CREDIT_EARNING:     '💵',
+  CREDIT_REFERRAL:    '🎁',
 };
 
 let txnPage = 0;
@@ -125,7 +127,7 @@ async function loadTransactions() {
     }
 
     listEl.innerHTML = txns.map(t => {
-      const isCredit = t.type === 'CREDIT_TOPUP' || t.type === 'REFUND' || t.type === 'CREDIT_EARNING';
+      const isCredit = t.type === 'CREDIT_TOPUP' || t.type === 'REFUND' || t.type === 'CREDIT_EARNING' || t.type === 'CREDIT_REFERRAL';
       const icon = TXN_ICON[t.type] || '💳';
       return `
         <div class="txn-item">

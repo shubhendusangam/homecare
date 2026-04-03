@@ -51,5 +51,33 @@ class GeoUtilsTest {
         double d = GeoUtils.haversineDistance(-33.8688, 151.2093, -37.8136, 144.9631);
         assertTrue(d > 600 && d < 800, "Sydney to Melbourne ≈ 714 km, got: " + d);
     }
+
+    @Test
+    @DisplayName("boundingBox — 10km radius returns correct lat/lng deltas")
+    void boundingBox_10kmRadius() {
+        // Delhi: 28.6139°N, 77.2090°E, radius 10 km
+        double[] bbox = GeoUtils.boundingBox(28.6139, 77.2090, 10);
+        // 10 km ≈ 0.09009° latitude
+        double expectedLatDelta = 10.0 / 111.0;
+        assertEquals(28.6139 - expectedLatDelta, bbox[0], 0.001, "minLat");
+        assertEquals(28.6139 + expectedLatDelta, bbox[1], 0.001, "maxLat");
+        // lngDelta is wider because cos(28.6°) ≈ 0.878
+        assertTrue(bbox[2] < 77.2090, "minLng should be less than centre");
+        assertTrue(bbox[3] > 77.2090, "maxLng should be greater than centre");
+        // Verify symmetry
+        double lngDelta = bbox[3] - 77.2090;
+        assertEquals(77.2090 - bbox[2], lngDelta, 0.0001, "lng deltas should be symmetric");
+        // lngDelta should be > latDelta (at non-equatorial latitudes)
+        assertTrue(lngDelta > expectedLatDelta, "lng delta should be wider than lat delta at 28°N");
+    }
+
+    @Test
+    @DisplayName("boundingBox — at equator, lat and lng deltas are equal")
+    void boundingBox_equator() {
+        double[] bbox = GeoUtils.boundingBox(0.0, 0.0, 10);
+        double latDelta = bbox[1] - 0.0;
+        double lngDelta = bbox[3] - 0.0;
+        assertEquals(latDelta, lngDelta, 0.001, "At equator, lat and lng deltas should be equal");
+    }
 }
 

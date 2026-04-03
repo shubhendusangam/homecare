@@ -17,7 +17,29 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
 
     Page<Booking> findByCustomerIdOrderByCreatedAtDesc(UUID customerId, Pageable pageable);
 
+    @Query(value = """
+        SELECT b FROM Booking b
+        LEFT JOIN FETCH b.customer
+        LEFT JOIN FETCH b.helper
+        WHERE b.customer.id = :customerId
+        ORDER BY b.createdAt DESC
+        """,
+        countQuery = "SELECT COUNT(b) FROM Booking b WHERE b.customer.id = :customerId")
+    Page<Booking> findByCustomerIdWithParties(@Param("customerId") UUID customerId, Pageable pageable);
+
     Page<Booking> findByHelperIdAndStatusInOrderByCreatedAtDesc(UUID helperId, List<BookingStatus> statuses, Pageable pageable);
+
+    @Query(value = """
+        SELECT b FROM Booking b
+        LEFT JOIN FETCH b.customer
+        LEFT JOIN FETCH b.helper
+        WHERE b.helper.id = :helperId AND b.status IN :statuses
+        ORDER BY b.createdAt DESC
+        """,
+        countQuery = "SELECT COUNT(b) FROM Booking b WHERE b.helper.id = :helperId AND b.status IN :statuses")
+    Page<Booking> findByHelperIdWithParties(@Param("helperId") UUID helperId,
+                                           @Param("statuses") List<BookingStatus> statuses,
+                                           Pageable pageable);
 
     @Query("SELECT b FROM Booking b WHERE b.helper.id = :helperId " +
            "AND b.status IN :statuses ORDER BY b.createdAt DESC")
@@ -47,6 +69,29 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
                                      @Param("from") Instant from,
                                      @Param("to") Instant to,
                                      Pageable pageable);
+
+    @Query(value = """
+        SELECT b FROM Booking b
+        LEFT JOIN FETCH b.customer
+        LEFT JOIN FETCH b.helper
+        WHERE (:status IS NULL OR b.status = :status)
+        AND (:serviceType IS NULL OR b.serviceType = :serviceType)
+        AND (:from IS NULL OR b.createdAt >= :from)
+        AND (:to IS NULL OR b.createdAt <= :to)
+        ORDER BY b.createdAt DESC
+        """,
+        countQuery = """
+        SELECT COUNT(b) FROM Booking b
+        WHERE (:status IS NULL OR b.status = :status)
+        AND (:serviceType IS NULL OR b.serviceType = :serviceType)
+        AND (:from IS NULL OR b.createdAt >= :from)
+        AND (:to IS NULL OR b.createdAt <= :to)
+        """)
+    Page<Booking> findAllWithFiltersAndParties(@Param("status") BookingStatus status,
+                                               @Param("serviceType") ServiceType serviceType,
+                                               @Param("from") Instant from,
+                                               @Param("to") Instant to,
+                                               Pageable pageable);
 
     @Query("SELECT COUNT(b) > 0 FROM Booking b WHERE b.helper.id = :helperId " +
            "AND b.status IN ('ASSIGNED', 'IN_PROGRESS', 'HELPER_EN_ROUTE')")

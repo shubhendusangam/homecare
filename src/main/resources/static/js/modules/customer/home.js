@@ -55,6 +55,19 @@ export async function render(container) {
       <h3 style="font-size:.95rem;margin-bottom:.5rem">Upcoming</h3>
       <ul class="data-list" id="upcoming-list"></ul>
     </div>
+
+    <!-- Referral Card -->
+    <div class="referral-card mt-3" id="referral-promo" style="cursor:pointer">
+      <div class="rc-title">🎁 Refer & Earn ₹100</div>
+      <div class="rc-sub">Share your code with friends. They get ₹50, you get ₹100!</div>
+    </div>
+
+    <!-- Quick Links -->
+    <div class="mt-2" style="display:flex;gap:.5rem;flex-wrap:wrap">
+      <a href="#/customer/subscriptions" class="chip">📋 Subscriptions</a>
+      <a href="#/customer/favourites" class="chip">❤️ Favourites</a>
+      <a href="#/customer/disputes" class="chip">⚖️ Disputes</a>
+    </div>
   `;
 
   // Greeting (XSS-safe)
@@ -80,6 +93,11 @@ export async function render(container) {
 
   // Load bookings in parallel (don't block render)
   loadActiveAndRecent();
+
+  // Referral card click
+  document.getElementById('referral-promo').addEventListener('click', () => {
+    router.navigate('/customer/referrals');
+  });
 }
 
 async function loadActiveAndRecent() {

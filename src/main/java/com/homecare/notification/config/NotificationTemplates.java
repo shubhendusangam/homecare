@@ -72,6 +72,51 @@ public class NotificationTemplates {
                 "{{body}}",
                 ""
         });
+        templates.put(NotificationType.CHAT_MESSAGE, new String[]{
+                "New Chat Message",
+                "{{senderName}} sent you a message on booking #{{bookingId}}",
+                "/bookings/{{bookingId}}/chat"
+        });
+        templates.put(NotificationType.SUBSCRIPTION_STARTED, new String[]{
+                "Subscription Started",
+                "You've subscribed to {{planName}} ({{serviceType}}). ₹{{amount}} debited. Next renewal: {{nextRenewalDate}}.",
+                "/subscriptions"
+        });
+        templates.put(NotificationType.SUBSCRIPTION_RENEWED, new String[]{
+                "Subscription Renewed",
+                "Your {{planName}} subscription has been renewed. ₹{{amount}} debited. Next renewal: {{nextRenewalDate}}.",
+                "/subscriptions"
+        });
+        templates.put(NotificationType.WALLET_INSUFFICIENT_FOR_RENEWAL, new String[]{
+                "Subscription Paused",
+                "Your {{planName}} subscription could not be renewed — insufficient wallet balance (₹{{amount}} needed). Top up to resume.",
+                "/wallet/topup"
+        });
+        templates.put(NotificationType.SUBSCRIPTION_CANCELLED, new String[]{
+                "Subscription Cancelled",
+                "Your {{planName}} ({{serviceType}}) subscription has been cancelled.",
+                "/subscriptions"
+        });
+        templates.put(NotificationType.DISPUTE_RAISED, new String[]{
+                "Dispute Raised",
+                "A {{disputeType}} dispute has been raised for booking #{{bookingId}}. {{message}}",
+                "/disputes/{{disputeId}}"
+        });
+        templates.put(NotificationType.DISPUTE_RESOLVED, new String[]{
+                "Dispute Resolved",
+                "The dispute for booking #{{bookingId}} has been resolved: {{resolution}}. {{adminNotes}}",
+                "/disputes/{{disputeId}}"
+        });
+        templates.put(NotificationType.REFERRAL_SIGNUP_CREDIT, new String[]{
+                "Referral Bonus!",
+                "You received ₹{{amount}} wallet credit for signing up with a referral code. Welcome aboard!",
+                "/wallet"
+        });
+        templates.put(NotificationType.REFERRAL_BONUS_CREDIT, new String[]{
+                "Referral Reward!",
+                "Your referral {{refereeName}} completed their first booking. ₹{{amount}} has been credited to your wallet!",
+                "/wallet"
+        });
     }
 
     public String getTitle(NotificationType type) {
@@ -113,7 +158,9 @@ public class NotificationTemplates {
             case PAYMENT_SUCCESS -> "payment-receipt";
             case PAYMENT_REFUND -> "payment-refund";
             case BOOKING_REMINDER -> "booking-reminder";
-            default -> null; // no email for other types
+            case SUBSCRIPTION_STARTED -> "subscription-started";
+            case SUBSCRIPTION_CANCELLED -> "subscription-cancelled";
+            default -> null; // no email for chat, referral, dispute, and other types
         };
     }
 }

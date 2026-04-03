@@ -66,5 +66,49 @@ public class QuartzConfig {
                         .withMisfireHandlingInstructionFireAndProceed())
                 .build();
     }
+
+    // ─── ChatMessageCleanupJob — fires every day at 3:00 AM ─────────────
+
+    @Bean
+    public JobDetail chatMessageCleanupJobDetail() {
+        return JobBuilder.newJob(ChatMessageCleanupJob.class)
+                .withIdentity("chatMessageCleanupJob", "maintenance")
+                .storeDurably()
+                .requestRecovery(true)
+                .build();
+    }
+
+    @Bean
+    public Trigger chatMessageCleanupTrigger(JobDetail chatMessageCleanupJobDetail) {
+        return TriggerBuilder.newTrigger()
+                .forJob(chatMessageCleanupJobDetail)
+                .withIdentity("chatMessageCleanupTrigger", "maintenance")
+                .withSchedule(CronScheduleBuilder
+                        .cronSchedule("0 0 3 * * ?")
+                        .withMisfireHandlingInstructionFireAndProceed())
+                .build();
+    }
+
+    // ─── SubscriptionRenewalSweepJob — fires every day at 1:00 AM ───────
+
+    @Bean
+    public JobDetail subscriptionRenewalSweepJobDetail() {
+        return JobBuilder.newJob(SubscriptionRenewalSweepJob.class)
+                .withIdentity("subscriptionRenewalSweepJob", "subscription")
+                .storeDurably()
+                .requestRecovery(true)
+                .build();
+    }
+
+    @Bean
+    public Trigger subscriptionRenewalSweepTrigger(JobDetail subscriptionRenewalSweepJobDetail) {
+        return TriggerBuilder.newTrigger()
+                .forJob(subscriptionRenewalSweepJobDetail)
+                .withIdentity("subscriptionRenewalSweepTrigger", "subscription")
+                .withSchedule(CronScheduleBuilder
+                        .cronSchedule("0 0 1 * * ?")
+                        .withMisfireHandlingInstructionFireAndProceed())
+                .build();
+    }
 }
 

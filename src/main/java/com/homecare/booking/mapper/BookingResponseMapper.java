@@ -37,6 +37,7 @@ public class BookingResponseMapper {
                 .paymentReference(booking.getPaymentReference())
                 .rating(booking.getRating())
                 .reviewText(booking.getReviewText())
+                .subscriptionId(booking.getSubscription() != null ? booking.getSubscription().getId() : null)
                 .createdAt(booking.getCreatedAt())
                 .updatedAt(booking.getUpdatedAt())
                 .build();

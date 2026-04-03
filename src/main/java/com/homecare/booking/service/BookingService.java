@@ -18,11 +18,18 @@ import com.homecare.payment.service.PaymentService;
 import com.homecare.scheduler.BookingAutoExpireJob;
 import com.homecare.scheduler.BookingReminderJob;
 import com.homecare.scheduler.ScheduledBookingTriggerJob;
+import com.homecare.subscription.entity.CustomerSubscription;
+import com.homecare.subscription.repository.CustomerSubscriptionRepository;
+import com.homecare.subscription.service.SubscriptionService;
 import com.homecare.user.entity.HelperProfile;
 import com.homecare.user.entity.User;
 import com.homecare.user.enums.HelperStatus;
+import com.homecare.user.repository.FavouriteHelperRepository;
 import com.homecare.user.repository.HelperProfileRepository;
 import com.homecare.user.repository.UserRepository;
+import com.homecare.user.service.FavouriteHelperService;
+import com.homecare.user.service.HelperAvailabilityService;
+import com.homecare.referral.service.ReferralService;
 import com.homecare.tracking.service.TrackingService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -35,8 +42,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.time.Duration;
-import java.time.Instant;
+import java.time.*;
 import java.util.*;
 
 @Service
@@ -56,6 +62,12 @@ public class BookingService {
     private final PaymentService paymentService;
     private final BookingResponseMapper bookingResponseMapper;
     private final BookingStateMachine stateMachine;
+    private final SubscriptionService subscriptionService;
+    private final CustomerSubscriptionRepository customerSubscriptionRepository;
+    private final FavouriteHelperRepository favouriteHelperRepository;
+    private final FavouriteHelperService favouriteHelperService;
+    private final HelperAvailabilityService helperAvailabilityService;
+    private final ReferralService referralService;
 
     // ─── Create Booking ───────────────────────────────────────────────
 
@@ -89,10 +101,33 @@ public class BookingService {
                 .paymentStatus(PaymentStatus.PENDING)
                 .build();
 
+        // If subscription-backed booking, validate and link
+        if (request.getSubscriptionId() != null) {
+            CustomerSubscription subscription = customerSubscriptionRepository
+                    .findById(request.getSubscriptionId())
+                    .orElseThrow(() -> new ResourceNotFoundException(
+                            "CustomerSubscription", "id", request.getSubscriptionId()));
+
+            if (subscription.getStatus() != com.homecare.core.enums.SubscriptionStatus.ACTIVE) {
+                throw new BusinessException("Subscription is not active", ErrorCode.SUBSCRIPTION_CANNOT_BE_CANCELLED);
+            }
+            if (subscription.getSessionsUsedThisCycle() >= subscription.getPlan().getSessionsPerCycle()) {
+                throw new BusinessException(
+                        "All sessions for this subscription cycle have been used",
+                        ErrorCode.SUBSCRIPTION_CANNOT_BE_CANCELLED);
+            }
+            booking.setSubscription(subscription);
+            booking.setPaymentStatus(PaymentStatus.PAID); // Subscription covers payment
+        }
+
         booking = bookingRepository.save(booking);
         recordStatusChange(booking, null, BookingStatus.PENDING_ASSIGNMENT, customerId.toString(), "Booking created");
 
-        if (request.getBookingType() == BookingType.IMMEDIATE) {
+        if (request.getRequestedHelperId() != null) {
+            // Preferred helper — validate and assign directly, never silently fall through
+            assignRequestedHelper(booking, customerId, request.getRequestedHelperId());
+            booking = bookingRepository.save(booking);
+        } else if (request.getBookingType() == BookingType.IMMEDIATE) {
             // Auto-assign nearest helper
             findAndAssignHelper(booking);
             booking = bookingRepository.save(booking);
@@ -119,7 +154,7 @@ public class BookingService {
     @Transactional(readOnly = true)
     public PagedResponse<BookingResponse> getCustomerBookings(UUID customerId, Pageable pageable) {
         Page<BookingResponse> page = bookingRepository
-                .findByCustomerIdOrderByCreatedAtDesc(customerId, pageable)
+                .findByCustomerIdWithParties(customerId, pageable)
                 .map(this::toDto);
         return PagedResponse.from(page);
     }
@@ -296,7 +331,7 @@ public class BookingService {
     public PagedResponse<BookingResponse> getAllBookings(BookingStatus status, ServiceType serviceType,
                                                          Instant from, Instant to, Pageable pageable) {
         Page<BookingResponse> page = bookingRepository
-                .findAllWithFilters(status, serviceType, from, to, pageable)
+                .findAllWithFiltersAndParties(status, serviceType, from, to, pageable)
                 .map(this::toDto);
         return PagedResponse.from(page);
     }
@@ -306,16 +341,61 @@ public class BookingService {
     @Transactional(readOnly = true)
     public List<AvailableHelperResponse> findAvailableHelpers(ServiceType serviceType,
                                                                double lat, double lng,
-                                                               Double radiusKm) {
+                                                               Double radiusKm,
+                                                               Instant scheduledAt) {
         double radius = radiusKm != null ? radiusKm : bookingConfig.getBooking().getAutoAssignRadiusKm();
+        double[] bbox = GeoUtils.boundingBox(lat, lng, radius);
 
         List<HelperProfile> helpers = helperProfileRepository
-                .findNearbyAvailableHelpers(serviceType, lat, lng, radius);
+                .findNearbyAvailableHelpers(serviceType, lat, lng, radius,
+                        bbox[0], bbox[1], bbox[2], bbox[3]);
+
+        Instant resolvedTime = scheduledAt != null ? scheduledAt : Instant.now();
 
         return helpers.stream()
                 .filter(h -> !bookingRepository.hasActiveBooking(h.getUser().getId()))
+                .filter(h -> helperAvailabilityService.isHelperAvailableAt(h.getUser().getId(), resolvedTime))
                 .map(h -> toAvailableHelperDto(h, lat, lng))
                 .toList();
+    }
+
+    // ─── Available time slots for a service + location + date ─────────
+
+    @Transactional(readOnly = true)
+    public List<AvailableSlotResponse> getAvailableSlots(ServiceType serviceType,
+                                                          double lat, double lng,
+                                                          LocalDate date,
+                                                          Double radiusKm) {
+        double radius = radiusKm != null ? radiusKm : bookingConfig.getBooking().getAutoAssignRadiusKm();
+        double[] bbox = GeoUtils.boundingBox(lat, lng, radius);
+
+        List<HelperProfile> helpers = helperProfileRepository
+                .findNearbyAvailableHelpers(serviceType, lat, lng, radius,
+                        bbox[0], bbox[1], bbox[2], bbox[3]);
+
+        // Pre-filter: remove helpers already on active bookings
+        List<HelperProfile> freeHelpers = helpers.stream()
+                .filter(h -> !bookingRepository.hasActiveBooking(h.getUser().getId()))
+                .toList();
+
+        ZoneId zone = ZoneId.of("Asia/Kolkata");
+        List<AvailableSlotResponse> slots = new java.util.ArrayList<>();
+
+        for (int hour = 8; hour <= 20; hour++) {
+            LocalTime slotTime = LocalTime.of(hour, 0);
+            Instant slotInstant = date.atTime(slotTime).atZone(zone).toInstant();
+
+            int count = (int) freeHelpers.stream()
+                    .filter(h -> helperAvailabilityService.isHelperAvailableAt(h.getUser().getId(), slotInstant))
+                    .count();
+
+            slots.add(AvailableSlotResponse.builder()
+                    .time(slotTime)
+                    .availableHelperCount(count)
+                    .build());
+        }
+
+        return slots;
     }
 
     // ─── Helper: Get assigned bookings ────────────────────────────────
@@ -326,7 +406,7 @@ public class BookingService {
                 BookingStatus.ASSIGNED, BookingStatus.HELPER_EN_ROUTE,
                 BookingStatus.IN_PROGRESS, BookingStatus.COMPLETED);
         Page<BookingResponse> page = bookingRepository
-                .findByHelperIdAndStatusInOrderByCreatedAtDesc(helperId, statuses, pageable)
+                .findByHelperIdWithParties(helperId, statuses, pageable)
                 .map(this::toDto);
         return PagedResponse.from(page);
     }
@@ -498,14 +578,39 @@ public class BookingService {
         recordStatusChange(booking, oldStatus, BookingStatus.COMPLETED, helperId.toString(), "Job completed");
 
         // Release wallet hold — finalize customer deduction and credit helper
-        try {
-            paymentService.releaseBookingPayment(bookingId);
-        } catch (Exception e) {
-            log.error("Failed to release wallet hold for booking {}: {}", bookingId, e.getMessage());
+        // If subscription-backed, increment session used instead of normal wallet release
+        if (booking.getSubscription() != null) {
+            try {
+                subscriptionService.incrementSessionUsed(booking.getSubscription().getId());
+            } catch (Exception e) {
+                log.error("Failed to increment subscription session for booking {}: {}", bookingId, e.getMessage());
+            }
+        } else {
+            try {
+                paymentService.releaseBookingPayment(bookingId);
+            } catch (Exception e) {
+                log.error("Failed to release wallet hold for booking {}: {}", bookingId, e.getMessage());
+            }
         }
 
         notifyCustomer(booking, "Your booking has been completed. Please rate your experience!");
         trackingService.broadcastStatusChange(bookingId, BookingStatus.COMPLETED, "Job completed");
+
+        // Increment favourite helper bookings-together counter
+        if (booking.getHelper() != null) {
+            try {
+                favouriteHelperService.incrementBookingsTogether(booking.getCustomer(), booking.getHelper());
+            } catch (Exception e) {
+                log.warn("Failed to increment favourite bookings-together: {}", e.getMessage());
+            }
+        }
+
+        // Check and issue referrer credit if this is the referee's first completed booking
+        try {
+            referralService.checkAndIssueReferrerCredit(booking.getCustomer());
+        } catch (Exception e) {
+            log.warn("Failed to check referral credit for customer {}: {}", booking.getCustomer().getId(), e.getMessage());
+        }
 
         log.info("Booking {} completed by helper {}", bookingId, helperId);
         eventPublisher.publishEvent(AuditEvent.of("BOOKING_COMPLETED", helperId,
@@ -518,13 +623,37 @@ public class BookingService {
     @Transactional
     public void findAndAssignHelper(Booking booking) {
         double radius = bookingConfig.getBooking().getAutoAssignRadiusKm();
+        double[] bbox = GeoUtils.boundingBox(booking.getLatitude(), booking.getLongitude(), radius);
         List<HelperProfile> candidates = helperProfileRepository.findNearbyAvailableHelpers(
-                booking.getServiceType(), booking.getLatitude(), booking.getLongitude(), radius);
+                booking.getServiceType(), booking.getLatitude(), booking.getLongitude(), radius,
+                bbox[0], bbox[1], bbox[2], bbox[3]);
 
         // Filter out helpers with active bookings
-        Optional<HelperProfile> bestHelper = candidates.stream()
+        List<HelperProfile> availableCandidates = candidates.stream()
                 .filter(h -> !bookingRepository.hasActiveBooking(h.getUser().getId()))
-                .findFirst();
+                .toList();
+
+        // Filter by availability slot — only keep helpers whose schedule covers the booking time
+        Instant resolvedTime = booking.getScheduledAt() != null ? booking.getScheduledAt() : Instant.now();
+        availableCandidates = availableCandidates.stream()
+                .filter(h -> helperAvailabilityService.isHelperAvailableAt(h.getUser().getId(), resolvedTime))
+                .toList();
+
+        // Step 1: check if any of the customer's favourite helpers are available nearby
+        List<UUID> favouriteHelperIds = favouriteHelperRepository
+                .findHelperIdsByCustomerId(booking.getCustomer().getId());
+
+        Optional<HelperProfile> bestHelper = Optional.empty();
+        if (!favouriteHelperIds.isEmpty()) {
+            bestHelper = availableCandidates.stream()
+                    .filter(h -> favouriteHelperIds.contains(h.getUser().getId()))
+                    .findFirst();
+        }
+
+        // Step 2: fall back to normal haversine sort (first available)
+        if (bestHelper.isEmpty()) {
+            bestHelper = availableCandidates.stream().findFirst();
+        }
 
         if (bestHelper.isPresent()) {
             HelperProfile helperProfile = bestHelper.get();
@@ -556,6 +685,73 @@ public class BookingService {
                     booking.getId());
             notifyCustomer(booking, "We're looking for a helper near you. Please wait.");
         }
+    }
+
+    // ─── Assign requested (preferred) helper ────────────────────────
+
+    private void assignRequestedHelper(Booking booking, UUID customerId, UUID requestedHelperId) {
+        // Validate: requested helper is in customer's favourites
+        if (!favouriteHelperRepository.existsByCustomerIdAndHelperId(customerId, requestedHelperId)) {
+            throw new BusinessException(
+                    "Requested helper is not in your favourites. Add them first.",
+                    ErrorCode.VALIDATION_FAILED);
+        }
+
+        // Validate: user exists and has a helper profile
+        User helperUser = userRepository.findById(requestedHelperId)
+                .orElseThrow(() -> new ResourceNotFoundException("User", "id", requestedHelperId));
+        HelperProfile helperProfile = helperProfileRepository.findByUserId(requestedHelperId)
+                .orElseThrow(() -> new ResourceNotFoundException("HelperProfile", "userId", requestedHelperId));
+
+        // Validate: helper has required skill
+        if (!helperProfile.getSkills().contains(booking.getServiceType())) {
+            throw new BusinessException(
+                    "Your preferred helper does not offer " + booking.getServiceType() + " service.",
+                    ErrorCode.PREFERRED_HELPER_UNAVAILABLE);
+        }
+
+        // Validate: helper is ONLINE and not ON_JOB
+        if (helperProfile.getStatus() != HelperStatus.ONLINE) {
+            throw new BusinessException(
+                    "Your preferred helper is not available (status: " + helperProfile.getStatus()
+                            + "). Book with a different helper or remove preference.",
+                    ErrorCode.PREFERRED_HELPER_UNAVAILABLE);
+        }
+
+        // Validate: helper's availability slot covers the booking time
+        Instant bookingTime = booking.getScheduledAt() != null ? booking.getScheduledAt() : Instant.now();
+        if (!helperAvailabilityService.isHelperAvailableAt(requestedHelperId, bookingTime)) {
+            throw new BusinessException(
+                    "Your preferred helper is not available at the requested time. " +
+                            "Check their availability schedule.",
+                    ErrorCode.HELPER_OUTSIDE_AVAILABILITY);
+        }
+
+        if (bookingRepository.hasActiveBooking(requestedHelperId)) {
+            throw new BusinessException(
+                    "Your preferred helper is currently on another job. Book with a different helper or remove preference.",
+                    ErrorCode.PREFERRED_HELPER_UNAVAILABLE);
+        }
+
+        // Assign directly
+        booking.setHelper(helperUser);
+        booking.setStatus(BookingStatus.ASSIGNED);
+        booking.setAcceptedAt(Instant.now());
+
+        helperProfile.setStatus(HelperStatus.ON_JOB);
+        helperProfile.setAvailable(false);
+        helperProfileRepository.save(helperProfile);
+
+        recordStatusChange(booking, BookingStatus.PENDING_ASSIGNMENT, BookingStatus.ASSIGNED,
+                customerId.toString(), "Assigned to preferred helper");
+
+        cancelAutoExpireJob(booking.getId());
+        scheduleBookingReminder(booking);
+
+        notifyHelper(booking, "A customer has requested you for a booking");
+        notifyCustomer(booking, "Your preferred helper has been assigned to your booking");
+
+        log.info("Booking {} assigned to preferred helper {}", booking.getId(), requestedHelperId);
     }
 
 

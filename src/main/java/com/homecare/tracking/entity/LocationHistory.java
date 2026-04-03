@@ -10,8 +10,7 @@ import java.time.Instant;
 
 @Entity
 @Table(name = "location_history", indexes = {
-        @Index(name = "idx_loc_booking", columnList = "booking_id"),
-        @Index(name = "idx_loc_recorded", columnList = "recorded_at")
+        @Index(name = "idx_location_booking_time", columnList = "booking_id, recorded_at")
 })
 @Getter
 @Setter
